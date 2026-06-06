@@ -1,0 +1,26 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.rsuser
+*.DotSettings.user
+project.lock.json
+
+## Environment
+.env
+.env.local
+appsettings.local.json
+appsettings.*.local.json
+
+## Rider / VS Code
+.idea/
+.vscode/
+*.sln.iml
+
+## macOS
+.DS_Store
+
+## Docker volumes
+postgres_data/
