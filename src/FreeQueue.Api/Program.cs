@@ -122,5 +122,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<QueueHub>("/hubs/queue");
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 app.Run();
