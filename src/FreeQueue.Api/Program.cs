@@ -46,10 +46,9 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    if (app.Environment.IsDevelopment())
-        await ctx.Database.EnsureCreatedAsync();
-    else
-        await ctx.Database.MigrateAsync();
+    // EnsureCreated handles schema creation until EF migrations are added.
+    // Switch to ctx.Database.MigrateAsync() once you run `dotnet ef migrations add Initial`.
+    await ctx.Database.EnsureCreatedAsync();
 }
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────
