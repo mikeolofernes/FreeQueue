@@ -11,26 +11,32 @@ interface Options {
   onDisconnected: () => void
 }
 
-// Polls for queue updates every 3s — more reliable than SignalR through cloud proxies.
 export function useQueueHub({ branchId, onQueueAdvanced, onConnected }: Options) {
   const stableAdvanced = useRef(onQueueAdvanced)
+  const stableConnected = useRef(onConnected)
   stableAdvanced.current = onQueueAdvanced
+  stableConnected.current = onConnected
+
+  const fetching = useRef(false)
 
   const poll = useCallback(async () => {
-    if (!branchId) return
+    if (!branchId || fetching.current) return
+    fetching.current = true
     try {
       const status = await api.getStatus(branchId)
       stableAdvanced.current(status)
     } catch {
-      // keep stale state on error
+      // keep stale state
+    } finally {
+      fetching.current = false
     }
   }, [branchId])
 
   useEffect(() => {
     if (!branchId) return
-    onConnected()
+    stableConnected.current()
     poll()
     const id = setInterval(poll, POLL_INTERVAL)
     return () => clearInterval(id)
-  }, [branchId, onConnected, poll])
+  }, [branchId, poll]) // onConnected intentionally excluded — stable ref used instead
 }

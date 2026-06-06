@@ -7,14 +7,18 @@ interface Options {
   onUpdate: () => void
 }
 
-// Polls for queue updates every 3s — more reliable than SignalR through cloud proxies.
 export function useTicketHub({ branchId, onUpdate }: Options) {
   const stableUpdate = useRef(onUpdate)
   stableUpdate.current = onUpdate
+  const fetching = useRef(false)
 
   useEffect(() => {
     if (!branchId) return
-    const id = setInterval(() => stableUpdate.current(), POLL_INTERVAL)
+    const id = setInterval(() => {
+      if (fetching.current) return
+      fetching.current = true
+      Promise.resolve(stableUpdate.current()).finally(() => { fetching.current = false })
+    }, POLL_INTERVAL)
     return () => clearInterval(id)
   }, [branchId])
 }
