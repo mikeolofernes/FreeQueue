@@ -39,6 +39,9 @@ export const api = {
   getStatus: (branchId: string) =>
     request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`),
 
+  callNext: (branchId: string) =>
+    request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/callnext`, { method: 'POST' }),
+
   advance: (branchId: string, ticketNumber: number, serviceType: string, durationSecs: number) =>
     request<QueueStatus>('/api/queue/advance', {
       method: 'POST',

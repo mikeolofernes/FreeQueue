@@ -68,15 +68,22 @@ export default function App() {
   }
 
   async function handleAdvance() {
-    if (!status?.currentTicketNumber || !status.currentServiceType || advancing) return
-    const duration = servingStartedAt ? Math.floor((Date.now() - servingStartedAt.getTime()) / 1000) : 0
+    if (advancing) return
     setAdvancing(true)
     try {
-      const next = await api.advance(branchId, status.currentTicketNumber, status.currentServiceType, duration)
-      setStatus(next)
-      showToast(`✓ Ticket #${status.currentTicketNumber} done — called next`)
+      if (!status?.currentTicketNumber || !status.currentServiceType) {
+        // No one being served yet — just call the first waiting customer
+        const next = await api.callNext(branchId)
+        setStatus(next)
+        showToast('▶ Called first customer')
+      } else {
+        const duration = servingStartedAt ? Math.floor((Date.now() - servingStartedAt.getTime()) / 1000) : 0
+        const next = await api.advance(branchId, status.currentTicketNumber, status.currentServiceType, duration)
+        setStatus(next)
+        showToast(`✓ Ticket #${status.currentTicketNumber} done — called next`)
+      }
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to advance', 'err')
+      showToast(err instanceof Error ? err.message : 'Failed', 'err')
     } finally {
       setAdvancing(false)
     }

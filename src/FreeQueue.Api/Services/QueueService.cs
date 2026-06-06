@@ -115,6 +115,21 @@ public class QueueService(
         return await GetQueueStatusAsync(req.BranchId);
     }
 
+    // ── Call Next (no current ticket — start of session or after a gap) ──────
+
+    public async Task<QueueStatusResponse> CallNextAsync(string branchId)
+    {
+        var next = await NextActiveTicketAsync(branchId);
+        if (next != null)
+        {
+            next.Status = TicketStatus.Near;
+            next.CalledAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            await BroadcastQueueStateAsync(branchId);
+        }
+        return await GetQueueStatusAsync(branchId);
+    }
+
     // ── Walk-in ───────────────────────────────────────────────────────────────
 
     public async Task<TicketResponse> AddWalkInAsync(AddWalkInRequest req)

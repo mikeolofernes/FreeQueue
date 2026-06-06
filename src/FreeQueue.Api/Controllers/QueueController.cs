@@ -68,6 +68,14 @@ public class QueueController(QueueService queue) : ControllerBase
     // ── Staff endpoints (JWT required) ────────────────────────────────────────
 
     [Authorize]
+    [HttpPost("{branchId}/callnext")]
+    public async Task<ActionResult<QueueStatusResponse>> CallNext(string branchId)
+    {
+        try { return Ok(await queue.CallNextAsync(branchId)); }
+        catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+    }
+
+    [Authorize]
     [HttpPost("advance")]
     public async Task<ActionResult<QueueStatusResponse>> Advance(AdvanceQueueRequest req)
     {
