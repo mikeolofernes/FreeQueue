@@ -1,0 +1,35 @@
+export interface TicketResponse {
+  id: number
+  branchId: string
+  ticketNumber: number
+  serviceType: string
+  customerName: string | null
+  status: string
+  peopleAhead: number
+  joinedAt: string
+  waitEstimate: WaitEstimate | null
+}
+
+export interface WaitEstimate {
+  estimatedMinutes: number
+  confidence: string
+  avgServiceSecs: number
+}
+
+export interface BranchResponse {
+  id: string
+  name: string
+  address: string | null
+  city: string | null
+  maxCapacity: number
+  graceMinutes: number
+}
+
+export interface QueueStatus {
+  branchId: string
+  currentTicketNumber: number | null
+  activeCount: number
+  servedToday: number
+  peopleWaiting: number
+  waitEstimate: WaitEstimate | null
+}
