@@ -1,8 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react'
-import * as signalR from '@microsoft/signalr'
 import type { QueueStatus } from './types'
+import { api } from './api'
 
-const HUB_URL = `${import.meta.env.VITE_API_URL ?? ''}/hubs/queue`
+const POLL_INTERVAL = 3000
 
 interface Options {
   branchId: string
@@ -11,49 +11,26 @@ interface Options {
   onDisconnected: () => void
 }
 
-export function useQueueHub({ branchId, onQueueAdvanced, onConnected, onDisconnected }: Options) {
-  const connRef = useRef<signalR.HubConnection | null>(null)
-
+// Polls for queue updates every 3s — more reliable than SignalR through cloud proxies.
+export function useQueueHub({ branchId, onQueueAdvanced, onConnected }: Options) {
   const stableAdvanced = useRef(onQueueAdvanced)
   stableAdvanced.current = onQueueAdvanced
 
-  const connect = useCallback(async () => {
-    if (connRef.current) {
-      await connRef.current.stop()
-    }
-
-    const conn = new signalR.HubConnectionBuilder()
-      .withUrl(HUB_URL, {
-        transport: signalR.HttpTransportType.WebSockets,
-        skipNegotiation: true,
-      })
-      .withAutomaticReconnect()
-      .configureLogging(signalR.LogLevel.Warning)
-      .build()
-
-    conn.on('QueueAdvanced', (status: QueueStatus) => stableAdvanced.current(status))
-
-    conn.onclose(() => onDisconnected())
-    conn.onreconnecting(() => onDisconnected())
-    conn.onreconnected(async () => {
-      await conn.invoke('JoinBranch', branchId)
-      onConnected()
-    })
-
+  const poll = useCallback(async () => {
+    if (!branchId) return
     try {
-      await conn.start()
-      await conn.invoke('JoinBranch', branchId)
-      connRef.current = conn
-      onConnected()
+      const status = await api.getStatus(branchId)
+      stableAdvanced.current(status)
     } catch {
-      onDisconnected()
+      // keep stale state on error
     }
-  }, [branchId, onConnected, onDisconnected])
+  }, [branchId])
 
   useEffect(() => {
-    connect()
-    return () => {
-      connRef.current?.stop()
-    }
-  }, [connect])
+    if (!branchId) return
+    onConnected()
+    poll()
+    const id = setInterval(poll, POLL_INTERVAL)
+    return () => clearInterval(id)
+  }, [branchId, onConnected, poll])
 }
