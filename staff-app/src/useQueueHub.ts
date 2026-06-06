@@ -23,7 +23,10 @@ export function useQueueHub({ branchId, onQueueAdvanced, onConnected, onDisconne
     }
 
     const conn = new signalR.HubConnectionBuilder()
-      .withUrl(HUB_URL, { transport: signalR.HttpTransportType.LongPolling })
+      .withUrl(HUB_URL, {
+        transport: signalR.HttpTransportType.WebSockets,
+        skipNegotiation: true,
+      })
       .withAutomaticReconnect()
       .configureLogging(signalR.LogLevel.Warning)
       .build()

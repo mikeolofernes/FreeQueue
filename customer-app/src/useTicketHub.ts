@@ -19,7 +19,10 @@ export function useTicketHub({ branchId, onUpdate }: Options) {
     if (connRef.current) await connRef.current.stop()
 
     const conn = new signalR.HubConnectionBuilder()
-      .withUrl(HUB_URL, { transport: signalR.HttpTransportType.LongPolling })
+      .withUrl(HUB_URL, {
+        transport: signalR.HttpTransportType.WebSockets,
+        skipNegotiation: true,
+      })
       .withAutomaticReconnect()
       .configureLogging(signalR.LogLevel.Warning)
       .build()
