@@ -87,7 +87,23 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    // EnsureCreated only runs on a brand-new database. For existing databases
+    // we run idempotent ALTER scripts so new tables/columns are always present.
     await ctx.Database.EnsureCreatedAsync();
+    await ctx.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS "StaffAccounts" (
+            "Id"           SERIAL PRIMARY KEY,
+            "BranchId"     VARCHAR(100) NOT NULL,
+            "Username"     VARCHAR(100) NOT NULL,
+            "PasswordHash" TEXT         NOT NULL,
+            "CreatedAt"    TIMESTAMP    NOT NULL DEFAULT NOW(),
+            CONSTRAINT "uq_StaffAccounts_BranchId_Username"
+                UNIQUE ("BranchId", "Username"),
+            CONSTRAINT "FK_StaffAccounts_Branches_BranchId"
+                FOREIGN KEY ("BranchId") REFERENCES "Branches"("Id")
+                ON DELETE CASCADE
+        );
+        """);
 }
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────
