@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useTicketHub } from '../useTicketHub'
@@ -16,6 +16,18 @@ function getStage(ticket: TicketResponse): Stage {
 
 const TICKET_KEY = (branchId: string) => `fq_ticket_${branchId}`
 
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission()
+  }
+}
+
+function sendNotification(title: string, body: string) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, { body, icon: '/favicon.ico' })
+  }
+}
+
 export function TicketPage() {
   const { ticketId } = useParams<{ ticketId: string }>()
   const navigate = useNavigate()
@@ -25,6 +37,8 @@ export function TicketPage() {
   const [error, setError] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const prevPeopleAhead = useRef<number | null>(null)
+  const prevStatus = useRef<string | null>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -35,7 +49,34 @@ export function TicketPage() {
     }
   }, [id])
 
-  useEffect(() => { refresh() }, [refresh])
+  // Fire browser notifications when position changes
+  useEffect(() => {
+    if (!ticket) return
+
+    const prev = prevPeopleAhead.current
+    const prevSt = prevStatus.current
+    const curr = ticket.peopleAhead
+
+    if (prev !== null && prev !== curr) {
+      if (curr === 0) {
+        sendNotification("It's your turn! 🔔", `Ticket #${ticket.ticketNumber} — Go to the counter now!`)
+      } else if (curr <= 3 && (prev === null || prev > 3)) {
+        sendNotification('Almost your turn! 🏃', `${curr} ${curr === 1 ? 'person' : 'people'} ahead — Start heading back!`)
+      }
+    }
+
+    if (prevSt !== null && prevSt !== ticket.status && ticket.status === 'near') {
+      sendNotification("It's your turn! 🔔", `Ticket #${ticket.ticketNumber} — Head to the counter now!`)
+    }
+
+    prevPeopleAhead.current = curr
+    prevStatus.current = ticket.status
+  }, [ticket])
+
+  useEffect(() => {
+    refresh()
+    requestNotificationPermission()
+  }, [refresh])
 
   useTicketHub({
     branchId: ticket?.branchId ?? '',
@@ -143,7 +184,6 @@ export function TicketPage() {
             {ticket.serviceType}
           </div>
 
-          {/* Position */}
           <div className={`rounded-2xl px-4 py-3 ${stage === 'far' ? 'bg-gray-50' : 'bg-white/20'}`}>
             {ticket.peopleAhead === 0 ? (
               <p className={`text-lg font-bold ${stage !== 'far' ? 'text-white' : 'text-teal-brand'}`}>
@@ -161,7 +201,6 @@ export function TicketPage() {
             )}
           </div>
 
-          {/* Wait estimate */}
           {ticket.waitEstimate && ticket.peopleAhead > 0 && (
             <p className={`text-xs mt-3 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
               ~{ticket.waitEstimate.estimatedMinutes} min estimated · {ticket.waitEstimate.confidence}
