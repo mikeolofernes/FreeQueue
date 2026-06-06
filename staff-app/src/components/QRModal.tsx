@@ -6,7 +6,10 @@ interface Props {
   onClose: () => void
 }
 
-const CUSTOMER_BASE = import.meta.env.VITE_CUSTOMER_URL ?? 'http://localhost:3001'
+// Use the same hostname the staff is on, but customer app port.
+// This auto-resolves to the PC's local IP when accessed from the network.
+const CUSTOMER_BASE = import.meta.env.VITE_CUSTOMER_URL
+  ?? `http://${window.location.hostname}:3001`
 
 export function QRModal({ branchId, branchName, onClose }: Props) {
   const url = `${CUSTOMER_BASE}/join?branch=${encodeURIComponent(branchId)}`
