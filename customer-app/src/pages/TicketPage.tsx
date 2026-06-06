@@ -191,11 +191,13 @@ export function TicketPage() {
               </p>
             ) : (
               <>
-                <p className={`text-3xl font-black ${stage !== 'far' ? 'text-white' : 'text-gray-800'}`}>
-                  {ticket.peopleAhead}
+                <p className={`text-2xl font-black ${stage !== 'far' ? 'text-white' : 'text-gray-800'}`}>
+                  {ticket.peopleAhead === 1
+                    ? '1 person is ahead of you'
+                    : `${ticket.peopleAhead} people are ahead of you`}
                 </p>
-                <p className={`text-xs font-medium ${stage !== 'far' ? 'opacity-80' : 'text-gray-400'}`}>
-                  {ticket.peopleAhead === 1 ? 'person' : 'people'} ahead of you
+                <p className={`text-xs mt-1 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
+                  You are number {ticket.peopleAhead + 1} in line
                 </p>
               </>
             )}
