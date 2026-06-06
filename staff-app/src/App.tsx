@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { api } from './api'
+import { api, auth } from './api'
 import { useQueueHub } from './useQueueHub'
-import { BranchSetup } from './components/BranchSetup'
+import { LoginScreen } from './components/LoginScreen'
 import { WalkInModal } from './components/WalkInModal'
 import { ElapsedTimer } from './components/ElapsedTimer'
+import { QRModal } from './components/QRModal'
 import type { QueueStatus } from './types'
 
 const BRANCH_KEY = 'fq_branch_id'
@@ -12,10 +13,12 @@ const BRANCH_NAME_KEY = 'fq_branch_name'
 export default function App() {
   const [branchId, setBranchId] = useState(() => localStorage.getItem(BRANCH_KEY) ?? '')
   const [branchName, setBranchName] = useState(() => localStorage.getItem(BRANCH_NAME_KEY) ?? '')
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!auth.getToken())
   const [status, setStatus] = useState<QueueStatus | null>(null)
   const [connected, setConnected] = useState(false)
   const [servingStartedAt, setServingStartedAt] = useState<Date | null>(null)
   const [showWalkIn, setShowWalkIn] = useState(false)
+  const [showQR, setShowQR] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const prevTicket = useRef<number | null>(null)
@@ -27,53 +30,46 @@ export default function App() {
 
   const refreshStatus = useCallback(async () => {
     if (!branchId) return
-    try {
-      const s = await api.getStatus(branchId)
-      setStatus(s)
-    } catch {
-      // keep stale state on transient errors
-    }
+    try { setStatus(await api.getStatus(branchId)) } catch { /* keep stale */ }
   }, [branchId])
 
-  // When queue advances via SignalR, update state
-  const handleQueueAdvanced = useCallback((s: QueueStatus) => {
-    setStatus(s)
-  }, [])
-
-  // Reset serving timer when the current ticket changes
   useEffect(() => {
-    if (!status) return
-    if (status.currentTicketNumber !== prevTicket.current) {
-      prevTicket.current = status.currentTicketNumber
-      setServingStartedAt(status.currentTicketNumber != null ? new Date() : null)
+    if (status?.currentTicketNumber !== prevTicket.current) {
+      prevTicket.current = status?.currentTicketNumber ?? null
+      setServingStartedAt(status?.currentTicketNumber != null ? new Date() : null)
     }
   }, [status?.currentTicketNumber])
 
-  // Initial load
-  useEffect(() => {
-    if (branchId) refreshStatus()
-  }, [branchId, refreshStatus])
+  useEffect(() => { if (branchId && isLoggedIn) refreshStatus() }, [branchId, isLoggedIn, refreshStatus])
 
   useQueueHub({
     branchId,
-    onQueueAdvanced: handleQueueAdvanced,
+    onQueueAdvanced: s => setStatus(s),
     onConnected: () => { setConnected(true); refreshStatus() },
     onDisconnected: () => setConnected(false),
   })
 
-  function handleBranchConfirm(id: string, name: string) {
+  function handleLogin(id: string, name: string) {
     localStorage.setItem(BRANCH_KEY, id)
     localStorage.setItem(BRANCH_NAME_KEY, name)
     setBranchId(id)
     setBranchName(name)
+    setIsLoggedIn(true)
+  }
+
+  function handleLogout() {
+    auth.clearToken()
+    localStorage.removeItem(BRANCH_KEY)
+    localStorage.removeItem(BRANCH_NAME_KEY)
+    setBranchId('')
+    setBranchName('')
+    setIsLoggedIn(false)
+    setStatus(null)
   }
 
   async function handleAdvance() {
     if (!status?.currentTicketNumber || !status.currentServiceType || advancing) return
-    const duration = servingStartedAt
-      ? Math.floor((Date.now() - servingStartedAt.getTime()) / 1000)
-      : 0
-
+    const duration = servingStartedAt ? Math.floor((Date.now() - servingStartedAt.getTime()) / 1000) : 0
     setAdvancing(true)
     try {
       const next = await api.advance(branchId, status.currentTicketNumber, status.currentServiceType, duration)
@@ -107,7 +103,7 @@ export default function App() {
     }
   }
 
-  if (!branchId) return <BranchSetup onConfirm={handleBranchConfirm} />
+  if (!isLoggedIn) return <LoginScreen onLogin={handleLogin} />
 
   const isServing = status?.currentTicketNumber != null
   const queueEmpty = !isServing && (status?.peopleWaiting ?? 0) === 0
@@ -118,16 +114,18 @@ export default function App() {
       <header className="bg-teal-brand text-white px-5 py-4 flex items-center justify-between shadow-md">
         <div>
           <h1 className="font-bold text-lg leading-none">QueueFree</h1>
-          <p className="text-teal-light text-sm mt-0.5 truncate max-w-[180px]">{branchName || branchId}</p>
+          <p className="text-teal-light text-sm mt-0.5 truncate max-w-[160px]">{branchName || branchId}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-gray-400'}`} />
-          <span className="text-xs text-teal-light">{connected ? 'Live' : 'Offline'}</span>
           <button
-            onClick={() => { localStorage.removeItem(BRANCH_KEY); localStorage.removeItem(BRANCH_NAME_KEY); setBranchId('') }}
-            className="ml-3 text-teal-light hover:text-white text-xs underline"
+            onClick={() => setShowQR(true)}
+            className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg font-medium transition-colors"
           >
-            Change
+            QR Code
+          </button>
+          <button onClick={handleLogout} className="text-teal-light hover:text-white text-xs transition-colors">
+            Logout
           </button>
         </div>
       </header>
@@ -141,13 +139,13 @@ export default function App() {
         </div>
       )}
 
-      {/* Main serving card */}
+      {/* Main area */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 gap-6">
         {queueEmpty ? (
           <div className="text-center space-y-2">
             <div className="text-5xl">🎉</div>
             <p className="text-xl font-bold text-gray-700">Queue is empty</p>
-            <p className="text-gray-400 text-sm">Add a walk-in to get started</p>
+            <p className="text-gray-400 text-sm">Add a walk-in or share the QR code</p>
           </div>
         ) : isServing ? (
           <div className="text-center space-y-1">
@@ -159,25 +157,19 @@ export default function App() {
           </div>
         ) : (
           <div className="text-center space-y-2">
-            <p className="text-gray-400 text-sm">Tap the button to call the next customer</p>
             <p className="text-2xl font-bold text-gray-600">{status?.peopleWaiting} waiting</p>
+            <p className="text-gray-400 text-sm">Tap the button to call the first customer</p>
           </div>
         )}
 
-        {/* Elapsed timer */}
         {isServing && <ElapsedTimer startedAt={servingStartedAt} />}
 
-        {/* MAIN BUTTON */}
         <button
           onClick={handleAdvance}
           disabled={advancing || queueEmpty}
-          className="w-full py-6 rounded-2xl bg-teal-brand hover:bg-teal-dark active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xl font-bold shadow-lg transition-all tap-active"
+          className="w-full py-6 rounded-2xl bg-teal-brand hover:bg-teal-dark active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xl font-bold shadow-lg transition-all"
         >
-          {advancing
-            ? 'Advancing…'
-            : isServing
-              ? '✓  Done — Call Next'
-              : '▶  Call First Customer'}
+          {advancing ? 'Advancing…' : isServing ? '✓  Done — Call Next' : '▶  Call First Customer'}
         </button>
       </div>
 
@@ -197,12 +189,11 @@ export default function App() {
         </button>
       </div>
 
-      {/* Walk-in modal */}
       {showWalkIn && <WalkInModal onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
+      {showQR && <QRModal branchId={branchId} branchName={branchName} onClose={() => setShowQR(false)} />}
 
-      {/* Toast */}
       {toast && (
-        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium z-50 transition-all ${
+        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium z-50 ${
           toast.type === 'ok' ? 'bg-gray-800' : 'bg-red-500'
         }`}>
           {toast.msg}

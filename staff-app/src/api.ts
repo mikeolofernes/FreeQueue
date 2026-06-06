@@ -1,14 +1,27 @@
 import type { QueueStatus, TicketResponse, UndoResponse } from './types'
 
-// Vite proxy forwards /api and /hubs to localhost:5000 in dev.
-// In production, set VITE_API_URL to your deployed API base URL.
 const BASE = import.meta.env.VITE_API_URL ?? ''
+const TOKEN_KEY = 'fq_staff_token'
+
+export const auth = {
+  getToken: () => localStorage.getItem(TOKEN_KEY),
+  setToken: (t: string) => localStorage.setItem(TOKEN_KEY, t),
+  clearToken: () => localStorage.removeItem(TOKEN_KEY),
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = auth.getToken()
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...init,
   })
+  if (res.status === 401) {
+    auth.clearToken()
+    window.location.reload()
+  }
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || `HTTP ${res.status}`)
@@ -17,6 +30,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  login: (branchId: string, username: string, password: string) =>
+    request<{ token: string; branchId: string; username: string }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ branchId, username, password }),
+    }),
+
   getStatus: (branchId: string) =>
     request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`),
 
@@ -39,5 +58,11 @@ export const api = {
     request('/api/branches', {
       method: 'POST',
       body: JSON.stringify({ id, name, maxCapacity: 50, graceMinutes: 15 }),
+    }),
+
+  setupStaffAccount: (branchId: string, username: string, password: string) =>
+    request('/api/auth/setup', {
+      method: 'POST',
+      body: JSON.stringify({ branchId, username, password }),
     }),
 }

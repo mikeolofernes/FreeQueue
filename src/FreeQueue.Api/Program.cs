@@ -1,8 +1,12 @@
 using FreeQueue.Api.Data;
 using FreeQueue.Api.Hubs;
 using FreeQueue.Api.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using StackExchange.Redis;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +22,27 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 builder.Services.AddScoped<WaitTimeEstimator>();
 builder.Services.AddScoped<QueueService>();
 
+// ── JWT Authentication ────────────────────────────────────────────────────────
+var jwtSecret = builder.Configuration["Jwt:Secret"]
+    ?? throw new InvalidOperationException("Jwt:Secret is required in configuration.");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = "freequeue",
+            ValidAudience = "freequeue-staff",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 // ── SignalR ───────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
 
@@ -26,10 +51,26 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() { Title = "QueueFree API", Version = "v1", Description = "Virtual queue backend — Staff Tap + Customer app" });
+    c.SwaggerDoc("v1", new() { Title = "QueueFree API", Version = "v1" });
+    // Allow pasting a JWT in Swagger UI
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } },
+            []
+        }
+    });
 });
 
-// ── CORS (Staff Tap web app + mobile app local dev) ───────────────────────────
+// ── CORS ──────────────────────────────────────────────────────────────────────
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
@@ -37,17 +78,15 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials()); // required for SignalR
+              .AllowCredentials());
 });
 
 var app = builder.Build();
 
-// ── Migrate / ensure DB is ready ──────────────────────────────────────────────
+// ── Ensure DB schema ──────────────────────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    // EnsureCreated handles schema creation until EF migrations are added.
-    // Switch to ctx.Database.MigrateAsync() once you run `dotnet ef migrations add Initial`.
     await ctx.Database.EnsureCreatedAsync();
 }
 
@@ -59,6 +98,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<QueueHub>("/hubs/queue");
