@@ -71,14 +71,18 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
+// In production set CORS__ALLOWEDORIGINS__0 / __1 etc. as Railway env vars.
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials());
+    {
+        var p = policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+        if (allowedOrigins.Length > 0)
+            p.WithOrigins(allowedOrigins);
+        else
+            p.SetIsOriginAllowed(_ => true); // dev fallback — no origins configured
+    });
 });
 
 var app = builder.Build();

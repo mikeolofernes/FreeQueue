@@ -1,0 +1,7 @@
+[build]
+  builder = "dockerfile"
+  dockerfilePath = "src/FreeQueue.Api/Dockerfile"
+
+[deploy]
+  healthcheckPath = "/swagger/index.html"
+  restartPolicyType = "on_failure"
