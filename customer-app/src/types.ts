@@ -19,6 +19,7 @@ export interface WaitEstimate {
 export interface BranchResponse {
   id: string
   name: string
+  category: string | null
   address: string | null
   city: string | null
   maxCapacity: number

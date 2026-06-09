@@ -324,7 +324,8 @@ public class QueueService(
 
     private async Task<QueueTicket?> NextActiveTicketAsync(string branchId) =>
         await db.QueueTickets
-            .Where(t => t.BranchId == branchId && t.Status == TicketStatus.Waiting)
+            .Where(t => t.BranchId == branchId
+                     && (t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Away))
             .OrderBy(t => t.TicketNumber)
             .FirstOrDefaultAsync();
 

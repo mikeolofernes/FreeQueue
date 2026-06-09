@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import type { BranchResponse } from '../types'
-
-const SERVICE_TYPES = ['Consultation', 'Cashier', 'New Account', 'Deposit', 'Withdrawal']
+import { getServiceTypes } from '../serviceTypes'
 
 const TICKET_KEY = (branchId: string) => `fq_ticket_${branchId}`
 
@@ -14,7 +13,8 @@ export function JoinPage() {
 
   const [branch, setBranch] = useState<BranchResponse | null>(null)
   const [branchError, setBranchError] = useState('')
-  const [serviceType, setServiceType] = useState(SERVICE_TYPES[0])
+  const serviceTypes = getServiceTypes(branch?.category)
+  const [serviceType, setServiceType] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,7 +31,7 @@ export function JoinPage() {
   useEffect(() => {
     if (!branchId) return
     api.getBranch(branchId)
-      .then(setBranch)
+      .then(b => { setBranch(b); setServiceType(getServiceTypes(b.category)[0]) })
       .catch(() => setBranchError('Branch not found. Please scan the QR code again.'))
   }, [branchId])
 
@@ -88,7 +88,7 @@ export function JoinPage() {
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-3">What do you need?</label>
           <div className="grid grid-cols-2 gap-2">
-            {SERVICE_TYPES.map(s => (
+            {serviceTypes.map(s => (
               <button
                 key={s}
                 type="button"

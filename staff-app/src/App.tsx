@@ -6,13 +6,16 @@ import { WalkInModal } from './components/WalkInModal'
 import { ElapsedTimer } from './components/ElapsedTimer'
 import { QRModal } from './components/QRModal'
 import type { QueueStatus } from './types'
+import { getServiceTypes } from './serviceTypes'
 
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
+const BRANCH_CATEGORY_KEY = 'fq_branch_category'
 
 export default function App() {
   const [branchId, setBranchId] = useState(() => localStorage.getItem(BRANCH_KEY) ?? '')
   const [branchName, setBranchName] = useState(() => localStorage.getItem(BRANCH_NAME_KEY) ?? '')
+  const [branchCategory, setBranchCategory] = useState(() => localStorage.getItem(BRANCH_CATEGORY_KEY))
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!auth.getToken())
   const [status, setStatus] = useState<QueueStatus | null>(null)
   const [connected, setConnected] = useState(false)
@@ -49,11 +52,14 @@ export default function App() {
     onDisconnected: () => setConnected(false),
   })
 
-  function handleLogin(id: string, name: string) {
+  function handleLogin(id: string, name: string, category: string | null) {
     localStorage.setItem(BRANCH_KEY, id)
     localStorage.setItem(BRANCH_NAME_KEY, name)
+    if (category) localStorage.setItem(BRANCH_CATEGORY_KEY, category)
+    else localStorage.removeItem(BRANCH_CATEGORY_KEY)
     setBranchId(id)
     setBranchName(name)
+    setBranchCategory(category)
     setIsLoggedIn(true)
   }
 
@@ -61,8 +67,10 @@ export default function App() {
     auth.clearToken()
     localStorage.removeItem(BRANCH_KEY)
     localStorage.removeItem(BRANCH_NAME_KEY)
+    localStorage.removeItem(BRANCH_CATEGORY_KEY)
     setBranchId('')
     setBranchName('')
+    setBranchCategory(null)
     setIsLoggedIn(false)
     setStatus(null)
   }
@@ -196,7 +204,7 @@ export default function App() {
         </button>
       </div>
 
-      {showWalkIn && <WalkInModal onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
+      {showWalkIn && <WalkInModal services={getServiceTypes(branchCategory)} onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
       {showQR && <QRModal branchId={branchId} branchName={branchName} onClose={() => setShowQR(false)} />}
 
       {toast && (
