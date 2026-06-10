@@ -1,4 +1,4 @@
-import type { QueueStatus, TicketResponse, UndoResponse } from './types'
+import type { BranchResponse, QueueStatus, TicketResponse, UndoResponse } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'fq_staff_token'
@@ -57,10 +57,13 @@ export const api = {
   undo: (branchId: string) =>
     request<UndoResponse>(`/api/queue/${encodeURIComponent(branchId)}/undo`, { method: 'POST' }),
 
-  createBranch: (id: string, name: string) =>
+  getBranch: (branchId: string) =>
+    request<BranchResponse>(`/api/branches/${encodeURIComponent(branchId)}`),
+
+  createBranch: (id: string, name: string, category: string) =>
     request('/api/branches', {
       method: 'POST',
-      body: JSON.stringify({ id, name, maxCapacity: 50, graceMinutes: 15 }),
+      body: JSON.stringify({ id, name, category, maxCapacity: 50, graceMinutes: 15 }),
     }),
 
   setupStaffAccount: (branchId: string, username: string, password: string) =>

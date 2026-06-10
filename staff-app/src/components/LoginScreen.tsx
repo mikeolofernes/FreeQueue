@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { api, auth } from '../api'
+import { BRANCH_CATEGORIES } from '../serviceTypes'
 
 interface Props {
-  onLogin: (branchId: string, branchName: string) => void
+  onLogin: (branchId: string, branchName: string, category: string | null) => void
 }
 
 export function LoginScreen({ onLogin }: Props) {
   const [tab, setTab] = useState<'login' | 'setup'>('login')
   const [branchId, setBranchId] = useState('')
   const [branchName, setBranchName] = useState('')
+  const [category, setCategory] = useState<string>(BRANCH_CATEGORIES[0].value)
   const [username, setUsername] = useState('staff')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -22,7 +24,8 @@ export function LoginScreen({ onLogin }: Props) {
     try {
       const res = await api.login(branchId.trim(), username.trim(), password)
       auth.setToken(res.token)
-      onLogin(res.branchId, branchName.trim() || res.branchId)
+      const branch = await api.getBranch(res.branchId).catch(() => null)
+      onLogin(res.branchId, branchName.trim() || res.branchId, branch?.category ?? null)
     } catch {
       setError('Wrong branch ID, username, or password.')
     } finally {
@@ -37,7 +40,7 @@ export function LoginScreen({ onLogin }: Props) {
     setSetupDone('')
     try {
       // Create branch first (ok if it already exists)
-      await api.createBranch(branchId.trim(), branchName.trim() || branchId.trim()).catch(() => {})
+      await api.createBranch(branchId.trim(), branchName.trim() || branchId.trim(), category).catch(() => {})
       await api.setupStaffAccount(branchId.trim(), username.trim(), password)
       setSetupDone(`Account ready! Switch to Login tab and sign in.`)
     } catch (err) {
@@ -88,15 +91,36 @@ export function LoginScreen({ onLogin }: Props) {
           </div>
 
           {tab === 'setup' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
-              <input
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-brand"
-                placeholder="e.g. Bacoor Clinic"
-                value={branchName}
-                onChange={e => setBranchName(e.target.value)}
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
+                <input
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-brand"
+                  placeholder="e.g. Bacoor Clinic"
+                  value={branchName}
+                  onChange={e => setBranchName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Branch Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {BRANCH_CATEGORIES.map(c => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => setCategory(c.value)}
+                      className={`py-2 px-3 rounded-xl text-sm font-medium border transition-colors text-left ${
+                        category === c.value
+                          ? 'bg-teal-brand text-white border-teal-brand'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-teal-brand'
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
 
           <div>

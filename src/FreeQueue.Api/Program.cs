@@ -107,6 +107,7 @@ using (var scope = app.Services.CreateScope())
                 FOREIGN KEY ("BranchId") REFERENCES "Branches"("Id")
                 ON DELETE CASCADE
         );
+        ALTER TABLE "Branches" ADD COLUMN IF NOT EXISTS "Category" VARCHAR(50) NULL;
         """);
 }
 

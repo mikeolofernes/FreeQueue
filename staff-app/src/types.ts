@@ -1,3 +1,13 @@
+export interface BranchResponse {
+  id: string
+  name: string
+  category: string | null
+  address: string | null
+  city: string | null
+  maxCapacity: number
+  graceMinutes: number
+}
+
 export interface QueueStatus {
   branchId: string
   currentTicketNumber: number | null

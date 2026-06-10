@@ -3,6 +3,7 @@ namespace FreeQueue.Api.DTOs;
 public record CreateBranchRequest(
     string Id,
     string Name,
+    string? Category,
     string? Address,
     string? City,
     int MaxCapacity = 50,
@@ -14,6 +15,7 @@ public record CreateBranchRequest(
 public record BranchResponse(
     string Id,
     string Name,
+    string? Category,
     string? Address,
     string? City,
     int MaxCapacity,
