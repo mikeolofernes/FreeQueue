@@ -46,8 +46,13 @@ export function KioskPage() {
 
   const [ticketNumber, setTicketNumber] = useState<number | null>(null)
   const [ticketId, setTicketId]         = useState<number | null>(null)
+  const [kioskToken, setKioskToken]     = useState<string | null>(null)
   const [qrSecondsLeft, setQrSecondsLeft] = useState(QR_RESET_SECS)
   const [scanned, setScanned]           = useState(false)
+
+  // Refs to access current ticketId / kioskToken in goIdle without stale closures
+  const ticketIdRef    = useRef<number | null>(null)
+  const kioskTokenRef  = useRef<string | null>(null)
 
   // Form idle warning state
   const [formWarnCountdown, setFormWarnCountdown] = useState(0)
@@ -75,6 +80,15 @@ export function KioskPage() {
   // ── Reset helpers ────────────────────────────────────────────────────────────
 
   const goIdle = useCallback(() => {
+    // Invalidate kiosk token so old QR screenshots stop working
+    const id    = ticketIdRef.current
+    const token = kioskTokenRef.current
+    if (id !== null && token !== null) {
+      api.invalidateKioskToken(id, token).catch(() => {})
+    }
+    ticketIdRef.current   = null
+    kioskTokenRef.current = null
+
     setScreen('idle')
     setName('')
     setPhone('')
@@ -82,6 +96,7 @@ export function KioskPage() {
     setError('')
     setTicketNumber(null)
     setTicketId(null)
+    setKioskToken(null)
     setFormWarnCountdown(0)
     setScanned(false)
   }, [branch])
@@ -143,8 +158,12 @@ export function KioskPage() {
     setError('')
     try {
       const ticket = await api.joinQueue(branchId, serviceType, name.trim(), phone.trim())
+      const { token } = await api.generateKioskToken(ticket.id)
+      ticketIdRef.current   = ticket.id
+      kioskTokenRef.current = token
       setTicketNumber(ticket.ticketNumber)
       setTicketId(ticket.id)
+      setKioskToken(token)
       setScreen('qr')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not join queue. Please try again.')
@@ -169,7 +188,7 @@ export function KioskPage() {
   // ── QR screen ────────────────────────────────────────────────────────────────
 
   if (screen === 'qr' && ticketNumber !== null && ticketId !== null) {
-    const ticketUrl = `${TICKET_BASE}/ticket/${ticketId}`
+    const ticketUrl = `${TICKET_BASE}/ticket/${ticketId}${kioskToken ? `?kt=${kioskToken}` : ''}`
 
     // ── Scanned confirmation ──────────────────────────────────────────────────
     if (scanned) {

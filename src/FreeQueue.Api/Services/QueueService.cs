@@ -333,13 +333,42 @@ public class QueueService(
             .OrderBy(t => t.TicketNumber)
             .FirstOrDefaultAsync();
 
-    public async Task ViewTicketAsync(int ticketId)
+    public async Task<string> GenerateKioskTokenAsync(int ticketId)
+    {
+        var token = Guid.NewGuid().ToString("N");
+        var cache = redis.GetDatabase();
+        await cache.StringSetAsync(KioskTokenKey(token), ticketId, TimeSpan.FromMinutes(10));
+        return token;
+    }
+
+    public async Task InvalidateKioskTokenAsync(string token)
+    {
+        var cache = redis.GetDatabase();
+        await cache.KeyDeleteAsync(KioskTokenKey(token));
+    }
+
+    public async Task ViewTicketAsync(int ticketId, string? kioskToken)
     {
         var ticket = await db.QueueTickets.FindAsync(ticketId);
-        if (ticket == null || ticket.ViewedAt.HasValue) return;
+        if (ticket == null) return;
+
+        if (ticket.ViewedAt.HasValue) return; // already viewed — free access
+
+        // First-time view requires a valid kiosk token
+        if (string.IsNullOrEmpty(kioskToken))
+            throw new UnauthorizedAccessException("QR code is expired or invalid.");
+
+        var cache = redis.GetDatabase();
+        var val = await cache.StringGetAsync(KioskTokenKey(kioskToken));
+        if (val.IsNullOrEmpty || (int)val != ticketId)
+            throw new UnauthorizedAccessException("QR code is expired or invalid.");
+
+        await cache.KeyDeleteAsync(KioskTokenKey(kioskToken)); // consume token
         ticket.ViewedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
     }
+
+    private static string KioskTokenKey(string token) => $"kiosk-token:{token}";
 
     private static TicketResponse MapTicket(QueueTicket t, int peopleAhead, WaitEstimateDto? estimate) =>
         new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate, t.ViewedAt);

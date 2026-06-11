@@ -42,6 +42,12 @@ export const api = {
   getStatus: (branchId: string) =>
     request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`),
 
-  viewTicket: (ticketId: number) =>
-    request<void>(`/api/queue/ticket/${ticketId}/view`, { method: 'POST' }),
+  generateKioskToken: (ticketId: number) =>
+    request<{ token: string }>(`/api/queue/ticket/${ticketId}/kiosk-token`, { method: 'POST' }),
+
+  invalidateKioskToken: (ticketId: number, token: string) =>
+    request<void>(`/api/queue/ticket/${ticketId}/kiosk-token?token=${encodeURIComponent(token)}`, { method: 'DELETE' }),
+
+  viewTicket: (ticketId: number, kt?: string) =>
+    request<void>(`/api/queue/ticket/${ticketId}/view${kt ? `?kt=${encodeURIComponent(kt)}` : ''}`, { method: 'POST' }),
 }

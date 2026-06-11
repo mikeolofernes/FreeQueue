@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useTicketHub } from '../useTicketHub'
 import type { TicketResponse } from '../types'
@@ -30,8 +30,10 @@ function sendNotification(title: string, body: string) {
 
 export function TicketPage() {
   const { ticketId } = useParams<{ ticketId: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const id = Number(ticketId)
+  const kt = searchParams.get('kt') ?? undefined
 
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
   const [error, setError] = useState('')
@@ -76,8 +78,8 @@ export function TicketPage() {
   useEffect(() => {
     refresh()
     requestNotificationPermission()
-    api.viewTicket(id).catch(() => {}) // fire-and-forget — signals kiosk that QR was scanned
-  }, [refresh, id])
+    api.viewTicket(id, kt).catch(() => {}) // fire-and-forget — signals kiosk that QR was scanned; kt validates one-time token
+  }, [refresh, id, kt])
 
   useTicketHub({
     branchId: ticket?.branchId ?? '',
