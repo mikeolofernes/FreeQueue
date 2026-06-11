@@ -68,7 +68,4 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ branchId, username, password }),
     }),
-
-  generateQrToken: () =>
-    request<{ token: string; ttlSeconds: number }>('/api/qr/token', { method: 'POST' }),
 }

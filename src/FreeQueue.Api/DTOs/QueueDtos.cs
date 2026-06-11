@@ -4,8 +4,7 @@ public record JoinQueueRequest(
     string BranchId,
     string ServiceType,
     string? CustomerName,
-    string? Phone,
-    string? QrToken
+    string? Phone
 );
 
 public record AdvanceQueueRequest(

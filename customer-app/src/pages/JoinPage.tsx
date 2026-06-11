@@ -11,7 +11,6 @@ export function JoinPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const branchId = params.get('branch') ?? ''
-  const qrToken = params.get('qrt') ?? ''
 
   const [branch, setBranch] = useState<BranchResponse | null>(null)
   const [branchError, setBranchError] = useState('')
@@ -42,7 +41,7 @@ export function JoinPage() {
     setLoading(true)
     setError('')
     try {
-      const ticket = await api.joinQueue(branchId, serviceType, name.trim(), phone.trim(), qrToken)
+      const ticket = await api.joinQueue(branchId, serviceType, name.trim(), phone.trim())
       localStorage.setItem(TICKET_KEY(branchId), String(ticket.id))
       navigate(`/ticket/${ticket.id}`)
     } catch (err) {
@@ -52,13 +51,13 @@ export function JoinPage() {
     }
   }
 
-  if (!branchId || (!qrToken && !import.meta.env.DEV)) {
+  if (!branchId) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
         <div>
           <div className="text-5xl mb-4">📵</div>
-          <p className="text-gray-600 font-medium">Please scan the QR code at the counter.</p>
-          <p className="text-gray-400 text-sm mt-1">This page can only be accessed by scanning the QR code displayed at the branch.</p>
+          <p className="text-gray-600 font-medium">No branch selected.</p>
+          <p className="text-gray-400 text-sm mt-1">Please scan the QR code at the branch.</p>
         </div>
       </div>
     )
