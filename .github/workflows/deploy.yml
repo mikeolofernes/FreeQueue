@@ -31,7 +31,7 @@ jobs:
             echo "==> Building staff app..."
             cd staff-app
             npm install --silent
-            VITE_API_URL=https://freequeue.duckdns.org npm run build
+            VITE_API_URL=https://freequeue.duckdns.org VITE_CUSTOMER_URL=https://freequeue.duckdns.org npm run build
             cd ..
 
             echo "==> Restarting API..."
