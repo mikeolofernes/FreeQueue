@@ -1,19 +1,28 @@
 using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FreeQueue.Api.Controllers;
 
 [ApiController]
 [Route("api/queue")]
-public class QueueController(QueueService queue) : ControllerBase
+public class QueueController(QueueService queue, QrTokenService qrTokens, IWebHostEnvironment env) : ControllerBase
 {
     // ── Customer endpoints (public) ───────────────────────────────────────────
 
     [HttpPost("join")]
     public async Task<ActionResult<TicketResponse>> Join(JoinQueueRequest req)
     {
+        if (!env.IsDevelopment())
+        {
+            var tokenValid = !string.IsNullOrEmpty(req.QrToken)
+                && await qrTokens.ValidateAndConsumeAsync(req.QrToken, req.BranchId);
+            if (!tokenValid)
+                return BadRequest("Invalid or expired QR code. Please scan the QR code at the counter.");
+        }
+
         try { return Ok(await queue.JoinQueueAsync(req)); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }

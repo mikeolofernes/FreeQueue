@@ -21,6 +21,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 // ── Application services ──────────────────────────────────────────────────────
 builder.Services.AddScoped<WaitTimeEstimator>();
 builder.Services.AddScoped<QueueService>();
+builder.Services.AddSingleton<QrTokenService>();
 
 // ── JWT Authentication ────────────────────────────────────────────────────────
 var jwtSecret = builder.Configuration["Jwt:Secret"]

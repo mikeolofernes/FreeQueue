@@ -18,10 +18,10 @@ export const api = {
   getBranch: (branchId: string) =>
     request<BranchResponse>(`/api/branches/${encodeURIComponent(branchId)}`),
 
-  joinQueue: (branchId: string, serviceType: string, customerName: string, phone: string) =>
+  joinQueue: (branchId: string, serviceType: string, customerName: string, phone: string, qrToken: string) =>
     request<TicketResponse>('/api/queue/join', {
       method: 'POST',
-      body: JSON.stringify({ branchId, serviceType, customerName, phone }),
+      body: JSON.stringify({ branchId, serviceType, customerName, phone, qrToken }),
     }),
 
   getTicket: (ticketId: number) =>
