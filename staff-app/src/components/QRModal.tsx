@@ -6,19 +6,17 @@ interface Props {
   onClose: () => void
 }
 
-// Use the same hostname the staff is on, but customer app port.
-// This auto-resolves to the PC's local IP when accessed from the network.
 const CUSTOMER_BASE = import.meta.env.VITE_CUSTOMER_URL
   ?? `http://${window.location.hostname}:3001`
 
 export function QRModal({ branchId, branchName, onClose }: Props) {
-  const url = `${CUSTOMER_BASE}/join?branch=${encodeURIComponent(branchId)}`
+  const url = `${CUSTOMER_BASE}/kiosk?branch=${encodeURIComponent(branchId)}`
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm text-center space-y-5">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">Customer QR Code</h2>
+          <h2 className="text-lg font-bold text-gray-900">Kiosk URL</h2>
           <p className="text-sm text-gray-400 mt-1">{branchName}</p>
         </div>
 
@@ -38,8 +36,8 @@ export function QRModal({ branchId, branchName, onClose }: Props) {
         </div>
 
         <p className="text-xs text-gray-400">
-          Print or display this QR code at your counter.<br />
-          Customers scan it to join the queue — no app install needed.
+          Open this URL on the entrance tablet.<br />
+          Customers fill in their details there and receive a QR for their phone.
         </p>
 
         <button

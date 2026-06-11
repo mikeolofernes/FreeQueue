@@ -1,13 +1,13 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { JoinPage } from './pages/JoinPage'
+import { KioskPage } from './pages/KioskPage'
 import { TicketPage } from './pages/TicketPage'
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/join" element={<JoinPage />} />
+      <Route path="/kiosk" element={<KioskPage />} />
       <Route path="/ticket/:ticketId" element={<TicketPage />} />
-      <Route path="*" element={<Navigate to="/join" replace />} />
+      <Route path="*" element={<Navigate to="/kiosk" replace />} />
     </Routes>
   )
 }
