@@ -8,6 +8,7 @@ export interface TicketResponse {
   peopleAhead: number
   joinedAt: string
   waitEstimate: WaitEstimate | null
+  viewedAt: string | null
 }
 
 export interface WaitEstimate {

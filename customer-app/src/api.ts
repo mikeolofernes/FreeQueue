@@ -41,4 +41,7 @@ export const api = {
 
   getStatus: (branchId: string) =>
     request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`),
+
+  viewTicket: (ticketId: number) =>
+    request<void>(`/api/queue/ticket/${ticketId}/view`, { method: 'POST' }),
 }

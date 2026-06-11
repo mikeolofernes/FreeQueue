@@ -76,7 +76,8 @@ export function TicketPage() {
   useEffect(() => {
     refresh()
     requestNotificationPermission()
-  }, [refresh])
+    api.viewTicket(id).catch(() => {}) // fire-and-forget — signals kiosk that QR was scanned
+  }, [refresh, id])
 
   useTicketHub({
     branchId: ticket?.branchId ?? '',

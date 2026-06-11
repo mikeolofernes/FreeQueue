@@ -125,6 +125,7 @@ using (var scope = app.Services.CreateScope())
                 ON DELETE CASCADE
         );
         ALTER TABLE "Branches" ADD COLUMN IF NOT EXISTS "Category" VARCHAR(50) NULL;
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "ViewedAt" TIMESTAMP NULL;
         """);
 }
 

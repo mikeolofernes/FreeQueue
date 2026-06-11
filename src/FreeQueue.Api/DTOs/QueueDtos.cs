@@ -35,7 +35,8 @@ public record TicketResponse(
     string Status,
     int PeopleAhead,
     DateTime JoinedAt,
-    WaitEstimateDto? WaitEstimate
+    WaitEstimateDto? WaitEstimate,
+    DateTime? ViewedAt
 );
 
 public record QueueStatusResponse(

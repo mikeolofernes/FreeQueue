@@ -333,8 +333,16 @@ public class QueueService(
             .OrderBy(t => t.TicketNumber)
             .FirstOrDefaultAsync();
 
+    public async Task ViewTicketAsync(int ticketId)
+    {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null || ticket.ViewedAt.HasValue) return;
+        ticket.ViewedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
     private static TicketResponse MapTicket(QueueTicket t, int peopleAhead, WaitEstimateDto? estimate) =>
-        new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate);
+        new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate, t.ViewedAt);
 
     private async Task BroadcastQueueStateAsync(string branchId)
     {

@@ -47,6 +47,7 @@ export function KioskPage() {
   const [ticketNumber, setTicketNumber] = useState<number | null>(null)
   const [ticketId, setTicketId]         = useState<number | null>(null)
   const [qrSecondsLeft, setQrSecondsLeft] = useState(QR_RESET_SECS)
+  const [scanned, setScanned]           = useState(false)
 
   // Form idle warning state
   const [formWarnCountdown, setFormWarnCountdown] = useState(0)
@@ -82,6 +83,7 @@ export function KioskPage() {
     setTicketNumber(null)
     setTicketId(null)
     setFormWarnCountdown(0)
+    setScanned(false)
   }, [branch])
 
   // ── QR countdown ─────────────────────────────────────────────────────────────
@@ -94,6 +96,22 @@ export function KioskPage() {
     }, 1000)
     return () => clearInterval(id)
   }, [screen, goIdle])
+
+  // ── Scan detection — poll ticket until viewedAt is set ───────────────────────
+
+  useEffect(() => {
+    if (screen !== 'qr' || ticketId === null || scanned) return
+    const id = setInterval(async () => {
+      try {
+        const t = await api.getTicket(ticketId)
+        if (t.viewedAt) {
+          setScanned(true)
+          setTimeout(goIdle, 3000) // show confirmation for 3s then reset
+        }
+      } catch { /* ignore */ }
+    }, 2000)
+    return () => clearInterval(id)
+  }, [screen, ticketId, scanned, goIdle])
 
   // ── Form idle detection ──────────────────────────────────────────────────────
 
@@ -152,11 +170,23 @@ export function KioskPage() {
 
   if (screen === 'qr' && ticketNumber !== null && ticketId !== null) {
     const ticketUrl = `${TICKET_BASE}/ticket/${ticketId}`
+
+    // ── Scanned confirmation ──────────────────────────────────────────────────
+    if (scanned) {
+      return (
+        <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-white text-center">
+          <div className="text-8xl mb-6">✅</div>
+          <h2 className="text-3xl font-black mb-2">QR Scanned!</h2>
+          <p className="text-teal-light text-lg">Queue #{ticketNumber} confirmed on your phone.</p>
+          <p className="text-teal-light text-sm mt-1">Head to the waiting area — we'll notify you when it's your turn.</p>
+          <p className="text-white/50 text-xs mt-8">Resetting for next customer…</p>
+        </div>
+      )
+    }
+
+    // ── QR display ────────────────────────────────────────────────────────────
     return (
-      <div
-        className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-white text-center cursor-pointer"
-        onClick={goIdle}
-      >
+      <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-white text-center">
         <p className="text-teal-light text-lg font-medium mb-1">You're in line at</p>
         <h1 className="text-2xl font-bold mb-8">{branch?.name ?? branchId}</h1>
 
@@ -176,6 +206,7 @@ export function KioskPage() {
             <p className="text-xs text-gray-400 mt-0.5">Track your queue status in real time</p>
           </div>
 
+          {/* Countdown bar */}
           <div className="space-y-1">
             <div className="w-full bg-gray-100 rounded-full h-1.5">
               <div
@@ -183,8 +214,15 @@ export function KioskPage() {
                 style={{ width: `${(qrSecondsLeft / QR_RESET_SECS) * 100}%` }}
               />
             </div>
-            <p className="text-xs text-gray-400">Resetting in {qrSecondsLeft}s · tap anywhere to reset now</p>
+            <p className="text-xs text-gray-400">Auto-resets in {qrSecondsLeft}s</p>
           </div>
+
+          <button
+            onClick={goIdle}
+            className="w-full py-4 bg-teal-brand text-white font-bold text-lg rounded-2xl hover:bg-teal-dark transition-colors active:scale-95"
+          >
+            Done — Next Customer
+          </button>
         </div>
       </div>
     )

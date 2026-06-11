@@ -28,6 +28,13 @@ public class QueueController(QueueService queue) : ControllerBase
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
     }
 
+    [HttpPost("ticket/{ticketId:int}/view")]
+    public async Task<IActionResult> MarkViewed(int ticketId)
+    {
+        await queue.ViewTicketAsync(ticketId);
+        return Ok();
+    }
+
     [HttpPost("ticket/{ticketId:int}/stepaway")]
     public async Task<IActionResult> StepAway(int ticketId)
     {
