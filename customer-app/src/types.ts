@@ -8,6 +8,7 @@ export interface TicketResponse {
   peopleAhead: number
   joinedAt: string
   waitEstimate: WaitEstimate | null
+  viewedAt: string | null
 }
 
 export interface WaitEstimate {
@@ -19,6 +20,7 @@ export interface WaitEstimate {
 export interface BranchResponse {
   id: string
   name: string
+  category: string | null
   address: string | null
   city: string | null
   maxCapacity: number
@@ -28,6 +30,7 @@ export interface BranchResponse {
 export interface QueueStatus {
   branchId: string
   currentTicketNumber: number | null
+  currentServiceType: string | null
   activeCount: number
   servedToday: number
   peopleWaiting: number

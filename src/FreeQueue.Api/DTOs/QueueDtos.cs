@@ -55,3 +55,5 @@ public record WaitEstimateDto(
 );
 
 public record UndoResponse(bool Success, string Message);
+
+public record KioskTokenResponse(string Token);

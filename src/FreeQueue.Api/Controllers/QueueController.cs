@@ -2,6 +2,7 @@ using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FreeQueue.Api.Controllers;
 
@@ -12,6 +13,7 @@ public class QueueController(QueueService queue) : ControllerBase
     // ── Customer endpoints (public) ───────────────────────────────────────────
 
     [HttpPost("join")]
+    [EnableRateLimiting("join")]
     public async Task<ActionResult<TicketResponse>> Join(JoinQueueRequest req)
     {
         try { return Ok(await queue.JoinQueueAsync(req)); }
@@ -24,6 +26,27 @@ public class QueueController(QueueService queue) : ControllerBase
     {
         try { return Ok(await queue.GetTicketAsync(ticketId)); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+    }
+
+    [HttpPost("ticket/{ticketId:int}/kiosk-token")]
+    public async Task<ActionResult<KioskTokenResponse>> GenerateKioskToken(int ticketId)
+    {
+        var token = await queue.GenerateKioskTokenAsync(ticketId);
+        return Ok(new KioskTokenResponse(token));
+    }
+
+    [HttpDelete("ticket/{ticketId:int}/kiosk-token")]
+    public async Task<IActionResult> InvalidateKioskToken(int ticketId, [FromQuery] string token)
+    {
+        await queue.InvalidateKioskTokenAsync(token);
+        return Ok();
+    }
+
+    [HttpPost("ticket/{ticketId:int}/view")]
+    public async Task<IActionResult> MarkViewed(int ticketId, [FromQuery] string? kt)
+    {
+        try { await queue.ViewTicketAsync(ticketId, kt); return Ok(); }
+        catch (UnauthorizedAccessException ex) { return Unauthorized(ex.Message); }
     }
 
     [HttpPost("ticket/{ticketId:int}/stepaway")]

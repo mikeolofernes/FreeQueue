@@ -13,7 +13,8 @@ public class QueueService(
     AppDbContext db,
     WaitTimeEstimator estimator,
     IHubContext<QueueHub> hub,
-    IConnectionMultiplexer redis)
+    IConnectionMultiplexer redis,
+    ISmsService sms)
 {
     private const int MaxSkipsBeforeRemoval = 2;
     private const int MaxUndoLevels = 5;
@@ -108,6 +109,8 @@ public class QueueService(
 
             await hub.Clients.Group(QueueHub.BranchGroup(req.BranchId))
                 .SendAsync("TicketUpdated", new { ticketId = next.Id, status = next.Status, peopleAhead = 0 });
+
+            await NotifyCalledAsync(next, req.BranchId);
         }
 
         await BroadcastQueueStateAsync(req.BranchId);
@@ -125,6 +128,7 @@ public class QueueService(
             next.Status = TicketStatus.Near;
             next.CalledAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
+            await NotifyCalledAsync(next, branchId);
             await BroadcastQueueStateAsync(branchId);
         }
         return await GetQueueStatusAsync(branchId);
@@ -324,12 +328,50 @@ public class QueueService(
 
     private async Task<QueueTicket?> NextActiveTicketAsync(string branchId) =>
         await db.QueueTickets
-            .Where(t => t.BranchId == branchId && t.Status == TicketStatus.Waiting)
+            .Where(t => t.BranchId == branchId
+                     && (t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Away))
             .OrderBy(t => t.TicketNumber)
             .FirstOrDefaultAsync();
 
+    public async Task<string> GenerateKioskTokenAsync(int ticketId)
+    {
+        var token = Guid.NewGuid().ToString("N");
+        var cache = redis.GetDatabase();
+        await cache.StringSetAsync(KioskTokenKey(token), ticketId, TimeSpan.FromMinutes(10));
+        return token;
+    }
+
+    public async Task InvalidateKioskTokenAsync(string token)
+    {
+        var cache = redis.GetDatabase();
+        await cache.KeyDeleteAsync(KioskTokenKey(token));
+    }
+
+    public async Task ViewTicketAsync(int ticketId, string? kioskToken)
+    {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null) return;
+
+        if (ticket.ViewedAt.HasValue) return; // already viewed — free access
+
+        // First-time view requires a valid kiosk token
+        if (string.IsNullOrEmpty(kioskToken))
+            throw new UnauthorizedAccessException("QR code is expired or invalid.");
+
+        var cache = redis.GetDatabase();
+        var val = await cache.StringGetAsync(KioskTokenKey(kioskToken));
+        if (val.IsNullOrEmpty || (int)val != ticketId)
+            throw new UnauthorizedAccessException("QR code is expired or invalid.");
+
+        await cache.KeyDeleteAsync(KioskTokenKey(kioskToken)); // consume token
+        ticket.ViewedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    private static string KioskTokenKey(string token) => $"kiosk-token:{token}";
+
     private static TicketResponse MapTicket(QueueTicket t, int peopleAhead, WaitEstimateDto? estimate) =>
-        new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate);
+        new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate, t.ViewedAt);
 
     private async Task BroadcastQueueStateAsync(string branchId)
     {
@@ -366,4 +408,13 @@ public class QueueService(
     }
 
     private static string UndoKey(string branchId) => $"undo:{branchId}";
+
+    private async Task NotifyCalledAsync(QueueTicket ticket, string branchId)
+    {
+        if (string.IsNullOrWhiteSpace(ticket.Phone)) return;
+        var branch = await db.Branches.FindAsync(branchId);
+        var branchName = branch?.Name ?? branchId;
+        var msg = $"It's your turn! Queue #{ticket.TicketNumber} at {branchName} — please come to the counter now.";
+        _ = sms.SendAsync(ticket.Phone, msg); // fire-and-forget; don't block queue operations
+    }
 }
