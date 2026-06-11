@@ -2,6 +2,7 @@ using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FreeQueue.Api.Controllers;
 
@@ -12,6 +13,7 @@ public class QueueController(QueueService queue) : ControllerBase
     // ── Customer endpoints (public) ───────────────────────────────────────────
 
     [HttpPost("join")]
+    [EnableRateLimiting("join")]
     public async Task<ActionResult<TicketResponse>> Join(JoinQueueRequest req)
     {
         try { return Ok(await queue.JoinQueueAsync(req)); }

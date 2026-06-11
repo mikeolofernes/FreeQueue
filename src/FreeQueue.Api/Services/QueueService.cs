@@ -13,7 +13,8 @@ public class QueueService(
     AppDbContext db,
     WaitTimeEstimator estimator,
     IHubContext<QueueHub> hub,
-    IConnectionMultiplexer redis)
+    IConnectionMultiplexer redis,
+    ISmsService sms)
 {
     private const int MaxSkipsBeforeRemoval = 2;
     private const int MaxUndoLevels = 5;
@@ -108,6 +109,8 @@ public class QueueService(
 
             await hub.Clients.Group(QueueHub.BranchGroup(req.BranchId))
                 .SendAsync("TicketUpdated", new { ticketId = next.Id, status = next.Status, peopleAhead = 0 });
+
+            await NotifyCalledAsync(next, req.BranchId);
         }
 
         await BroadcastQueueStateAsync(req.BranchId);
@@ -125,6 +128,7 @@ public class QueueService(
             next.Status = TicketStatus.Near;
             next.CalledAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
+            await NotifyCalledAsync(next, branchId);
             await BroadcastQueueStateAsync(branchId);
         }
         return await GetQueueStatusAsync(branchId);
@@ -367,4 +371,13 @@ public class QueueService(
     }
 
     private static string UndoKey(string branchId) => $"undo:{branchId}";
+
+    private async Task NotifyCalledAsync(QueueTicket ticket, string branchId)
+    {
+        if (string.IsNullOrWhiteSpace(ticket.Phone)) return;
+        var branch = await db.Branches.FindAsync(branchId);
+        var branchName = branch?.Name ?? branchId;
+        var msg = $"It's your turn! Queue #{ticket.TicketNumber} at {branchName} — please come to the counter now.";
+        _ = sms.SendAsync(ticket.Phone, msg); // fire-and-forget; don't block queue operations
+    }
 }

@@ -1,4 +1,4 @@
-import type { BranchResponse, TicketResponse } from './types'
+import type { BranchResponse, QueueStatus, TicketResponse } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
@@ -38,4 +38,7 @@ export const api = {
 
   leave: (ticketId: number) =>
     request<void>(`/api/queue/ticket/${ticketId}/leave`, { method: 'POST' }),
+
+  getStatus: (branchId: string) =>
+    request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`),
 }

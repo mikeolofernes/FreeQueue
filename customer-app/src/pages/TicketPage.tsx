@@ -204,9 +204,14 @@ export function TicketPage() {
           </div>
 
           {ticket.waitEstimate && ticket.peopleAhead > 0 && (
-            <p className={`text-xs mt-3 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
-              ~{ticket.waitEstimate.estimatedMinutes} min estimated · {ticket.waitEstimate.confidence}
-            </p>
+            <div className={`mt-4 rounded-2xl px-4 py-3 ${stage !== 'far' ? 'bg-white/20' : 'bg-teal-brand/10'}`}>
+              <p className={`text-3xl font-black ${stage !== 'far' ? 'text-white' : 'text-teal-brand'}`}>
+                ~{ticket.waitEstimate.estimatedMinutes} min
+              </p>
+              <p className={`text-xs mt-0.5 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
+                estimated wait · {ticket.waitEstimate.confidence} confidence
+              </p>
+            </div>
           )}
         </div>
 

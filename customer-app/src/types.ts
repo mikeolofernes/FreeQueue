@@ -29,6 +29,7 @@ export interface BranchResponse {
 export interface QueueStatus {
   branchId: string
   currentTicketNumber: number | null
+  currentServiceType: string | null
   activeCount: number
   servedToday: number
   peopleWaiting: number

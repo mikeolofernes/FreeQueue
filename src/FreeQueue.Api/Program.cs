@@ -2,11 +2,13 @@ using FreeQueue.Api.Data;
 using FreeQueue.Api.Hubs;
 using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using StackExchange.Redis;
 using System.Text;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +23,21 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 // ── Application services ──────────────────────────────────────────────────────
 builder.Services.AddScoped<WaitTimeEstimator>();
 builder.Services.AddScoped<QueueService>();
+builder.Services.AddHttpClient<SmsService>();
+builder.Services.AddSingleton<ISmsService, SmsService>();
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("join", o =>
+    {
+        o.PermitLimit = 3;
+        o.Window = TimeSpan.FromMinutes(1);
+        o.QueueLimit = 0;
+        o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 
 // ── JWT Authentication ────────────────────────────────────────────────────────
 var jwtSecret = builder.Configuration["Jwt:Secret"]
@@ -119,6 +136,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
