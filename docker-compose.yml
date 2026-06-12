@@ -29,14 +29,14 @@ services:
 
   api:
     build:
-      context: ./src/FreeQueue.Api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/FreeQueue.Api/Dockerfile
     ports:
-      - "5000:8080"
+      - "127.0.0.1:5000:8080"
     environment:
       - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=freequeue;Username=freequeue;Password=freequeue_dev
       - ConnectionStrings__Redis=redis:6379
-      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_ENVIRONMENT=Production
     depends_on:
       postgres:
         condition: service_healthy
