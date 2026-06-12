@@ -110,9 +110,7 @@ public class QueueService(
                 .SendAsync("TicketUpdated", new { ticketId = next.Id, status = next.Status, peopleAhead = 0 });
         }
 
-        await BroadcastQueueStateAsync(req.BranchId);
-
-        return await GetQueueStatusAsync(req.BranchId);
+        return await BroadcastQueueStateAsync(req.BranchId);
     }
 
     // ── Call Next (no current ticket — start of session or after a gap) ──────
@@ -125,9 +123,8 @@ public class QueueService(
             next.Status = TicketStatus.Near;
             next.CalledAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
-            await BroadcastQueueStateAsync(branchId);
         }
-        return await GetQueueStatusAsync(branchId);
+        return await BroadcastQueueStateAsync(branchId);
     }
 
     // ── Walk-in ───────────────────────────────────────────────────────────────
@@ -340,7 +337,7 @@ public class QueueService(
     private static TicketResponse MapTicket(QueueTicket t, int peopleAhead, WaitEstimateDto? estimate) =>
         new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate);
 
-    private async Task BroadcastQueueStateAsync(string branchId)
+    private async Task<QueueStatusResponse> BroadcastQueueStateAsync(string branchId)
     {
         var status = await GetQueueStatusAsync(branchId);
         await hub.Clients.Group(QueueHub.BranchGroup(branchId))
@@ -356,6 +353,8 @@ public class QueueService(
                     status.WaitEstimate.Confidence
                 });
         }
+
+        return status;
     }
 
     private async Task BroadcastTicketUpdate(QueueTicket ticket)

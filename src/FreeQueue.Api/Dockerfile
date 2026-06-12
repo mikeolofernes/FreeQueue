@@ -3,7 +3,7 @@ WORKDIR /src
 COPY src/FreeQueue.Api/FreeQueue.Api.csproj .
 RUN dotnet restore
 COPY src/FreeQueue.Api/ .
-RUN dotnet publish -c Release -o /app/publish
+RUN dotnet publish -c Release -r linux-x64 --no-self-contained /p:PublishReadyToRun=true -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
