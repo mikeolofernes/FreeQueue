@@ -34,32 +34,17 @@ export const api = {
   getBranch: (branchId: string) =>
     request<BranchResponse>(`/api/branches/${encodeURIComponent(branchId)}`),
 
-  joinQueue: (branchId: string, serviceType: string, customerName: string, phone: string, qrSig: string, qrExp: number) =>
-    request<TicketResponse>('/api/queue/join', {
-      method: 'POST',
-      body: JSON.stringify({ branchId, serviceType, customerName, phone, qrSig, qrExp }),
-    }),
-
   kioskJoin: (branchId: string, serviceType: string, customerName: string, phone: string) =>
     request<TicketResponse>(`/api/queue/${encodeURIComponent(branchId)}/kiosk-join`, {
       method: 'POST',
       body: JSON.stringify({ serviceType, customerName, phone }),
     }),
 
-  getQrToken: (branchId: string) =>
-    request<{ exp: number; sig: string }>(`/api/queue/${encodeURIComponent(branchId)}/qr-token`, undefined, true),
-
   getTicket: (ticketId: number) =>
     request<TicketResponse>(`/api/queue/ticket/${ticketId}`),
 
   ticketViewed: (ticketId: number) =>
     request<void>(`/api/queue/ticket/${ticketId}/viewed`, { method: 'POST' }),
-
-  stepAway: (ticketId: number) =>
-    request<void>(`/api/queue/ticket/${ticketId}/stepaway`, { method: 'POST' }),
-
-  checkIn: (ticketId: number) =>
-    request<void>(`/api/queue/ticket/${ticketId}/checkin`, { method: 'POST' }),
 
   skip: (ticketId: number) =>
     request<void>(`/api/queue/ticket/${ticketId}/skip`, { method: 'POST' }),

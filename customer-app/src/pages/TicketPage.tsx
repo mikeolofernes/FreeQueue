@@ -24,7 +24,6 @@ export function TicketPage() {
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
   const [error, setError] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
-  const [actionLoading, setActionLoading] = useState(false)
 
   const viewedRef = useRef(false)
   useEffect(() => {
@@ -50,10 +49,8 @@ export function TicketPage() {
   })
 
   async function handleAction(action: () => Promise<unknown>) {
-    setActionLoading(true)
     try { await action(); await refresh() }
     catch { /* keep UI stable on error */ }
-    finally { setActionLoading(false) }
   }
 
   function clearTicket() {
@@ -118,8 +115,6 @@ export function TicketPage() {
     stage === 'close' ? 'bg-amber-brand text-white' :
     'bg-white text-gray-900'
 
-  const isAway = ticket.status === 'away'
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-sm mx-auto">
       {/* Header */}
@@ -181,31 +176,6 @@ export function TicketPage() {
           <StatusPill status={ticket.status} />
         </div>
 
-        {/* Step Away / Check In toggle */}
-        {(stage === 'far' || stage === 'close') && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <p className="text-sm font-semibold text-gray-700 mb-1">
-              {isAway ? '📍 You\'re stepped away' : '🚶 Need to step out?'}
-            </p>
-            <p className="text-xs text-gray-400 mb-4">
-              {isAway
-                ? 'We\'re holding your spot. Tap below when you\'re back.'
-                : 'Grab a coffee or run an errand — we\'ll hold your spot and notify you.'}
-            </p>
-            <button
-              disabled={actionLoading}
-              onClick={() => handleAction(isAway ? () => api.checkIn(id) : () => api.stepAway(id))}
-              className={`w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 ${
-                isAway
-                  ? 'bg-teal-brand text-white hover:bg-teal-dark'
-                  : 'border-2 border-teal-brand text-teal-brand hover:bg-teal-brand hover:text-white'
-              }`}
-            >
-              {actionLoading ? '…' : isAway ? "✓ I'm back — Check In" : '🚶 Step Away'}
-            </button>
-          </div>
-        )}
-
         {/* Leave queue */}
         <div className="mt-auto">
           {confirmLeave ? (
@@ -237,7 +207,6 @@ export function TicketPage() {
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     waiting: { label: '⏳ Waiting', cls: 'bg-gray-100 text-gray-600' },
-    away:    { label: '🚶 Stepped away', cls: 'bg-amber-50 text-amber-dark border border-amber-brand' },
     near:    { label: '⚡ Almost your turn', cls: 'bg-amber-brand text-white' },
     arrived: { label: '✅ Checked in', cls: 'bg-green-100 text-green-700' },
   }

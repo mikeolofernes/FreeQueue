@@ -13,15 +13,6 @@ public record KioskJoinRequest(
     string? Phone
 );
 
-public record QrJoinRequest(
-    string BranchId,
-    string ServiceType,
-    string? CustomerName,
-    string? Phone,
-    string QrSig,
-    long QrExp
-);
-
 public record AdvanceQueueRequest(
     string BranchId,
     int TicketNumber,
@@ -60,9 +51,7 @@ public record QueueStatusResponse(
     int ActiveCount,
     int ServedToday,
     int PeopleWaiting,
-    WaitEstimateDto? WaitEstimate,
-    int? FirstWaitingId,
-    string? FirstWaitingStatus
+    WaitEstimateDto? WaitEstimate
 );
 
 public record WaitEstimateDto(

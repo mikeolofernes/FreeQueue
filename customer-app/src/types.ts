@@ -33,8 +33,6 @@ export interface QueueStatus {
   servedToday: number
   peopleWaiting: number
   waitEstimate: WaitEstimate | null
-  firstWaitingId: number | null
-  firstWaitingStatus: string | null
 }
 
 export interface UndoResponse {

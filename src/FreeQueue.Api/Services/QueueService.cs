@@ -137,22 +137,6 @@ public class QueueService(
 
     // ── Ticket actions ────────────────────────────────────────────────────────
 
-    public async Task StepAwayAsync(int ticketId)
-    {
-        var ticket = await GetActiveTicketAsync(ticketId);
-        ticket.Status = TicketStatus.Away;
-        await db.SaveChangesAsync();
-        await BroadcastTicketUpdate(ticket);
-    }
-
-    public async Task CheckInAsync(int ticketId)
-    {
-        var ticket = await GetActiveTicketAsync(ticketId);
-        ticket.Status = TicketStatus.Arrived;
-        await db.SaveChangesAsync();
-        await BroadcastTicketUpdate(ticket);
-    }
-
     public async Task SkipAsync(int ticketId)
     {
         var ticket = await GetActiveTicketAsync(ticketId);
@@ -251,14 +235,11 @@ public class QueueService(
                           && t.ServedAt >= DateTime.UtcNow.Date);
 
         var current = activeTickets.FirstOrDefault(t => t.Status == TicketStatus.Near || t.Status == TicketStatus.Arrived);
-        var waiting = activeTickets.Count(t => t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Away);
+        var waiting = activeTickets.Count(t => t.Status == TicketStatus.Waiting);
 
         WaitEstimateDto? estimate = null;
         if (current != null)
             estimate = await estimator.EstimateAsync(branchId, current.ServiceType, waiting);
-
-        var firstWaiting = activeTickets
-            .FirstOrDefault(t => t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Away);
 
         return new QueueStatusResponse(
             branchId,
@@ -267,9 +248,7 @@ public class QueueService(
             activeTickets.Count,
             servedToday,
             waiting,
-            estimate,
-            firstWaiting?.Id,
-            firstWaiting?.Status
+            estimate
         );
     }
 

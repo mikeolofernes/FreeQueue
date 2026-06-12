@@ -4,7 +4,6 @@ import { useQueueHub } from './useQueueHub'
 import { LoginScreen } from './LoginScreen'
 import { WalkInModal } from './WalkInModal'
 import { ElapsedTimer } from './ElapsedTimer'
-import { QRModal } from './QRModal'
 import type { QueueStatus } from '../types'
 
 const BRANCH_KEY = 'fq_branch_id'
@@ -18,7 +17,6 @@ export default function StaffApp() {
   const [connected, setConnected] = useState(false)
   const [servingStartedAt, setServingStartedAt] = useState<Date | null>(null)
   const [showWalkIn, setShowWalkIn] = useState(false)
-  const [showQR, setShowQR] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const prevTicket = useRef<number | null>(null)
@@ -109,17 +107,6 @@ export default function StaffApp() {
     }
   }
 
-  async function handleSkipAway() {
-    if (!status?.firstWaitingId) return
-    try {
-      await api.skip(status.firstWaitingId)
-      await refreshStatus()
-      showToast('↩ Skipped away customer')
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Skip failed', 'err')
-    }
-  }
-
   if (!isLoggedIn) return <LoginScreen onLogin={handleLogin} />
 
   const isServing = status?.currentTicketNumber != null
@@ -134,12 +121,6 @@ export default function StaffApp() {
         </div>
         <div className="flex items-center gap-3">
           <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-gray-400'}`} />
-          <button
-            onClick={() => setShowQR(true)}
-            className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg font-medium transition-colors"
-          >
-            QR Code
-          </button>
           <button onClick={handleLogout} className="text-teal-light hover:text-white text-xs transition-colors">
             Logout
           </button>
@@ -187,7 +168,7 @@ export default function StaffApp() {
         </button>
       </div>
 
-      <div className="bg-white border-t border-gray-100 px-5 py-4 flex gap-3 flex-wrap">
+      <div className="bg-white border-t border-gray-100 px-5 py-4 flex gap-3">
         <button
           onClick={() => setShowWalkIn(true)}
           className="flex-1 py-3 rounded-xl border-2 border-teal-brand text-teal-brand font-semibold hover:bg-teal-brand hover:text-white transition-colors"
@@ -200,18 +181,9 @@ export default function StaffApp() {
         >
           ↩ Undo
         </button>
-        {!isServing && status?.firstWaitingStatus === 'away' && (
-          <button
-            onClick={handleSkipAway}
-            className="w-full py-3 rounded-xl border-2 border-amber-400 text-amber-700 font-semibold hover:bg-amber-50 transition-colors text-sm"
-          >
-            🚶 Skip stepped-away customer
-          </button>
-        )}
       </div>
 
       {showWalkIn && <WalkInModal onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
-      {showQR && <QRModal branchId={branchId} branchName={branchName} onClose={() => setShowQR(false)} />}
 
       {toast && (
         <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium z-50 ${
