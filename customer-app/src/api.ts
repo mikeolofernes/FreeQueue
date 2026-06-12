@@ -110,4 +110,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ pin }),
     }, true),
+
+  verifyKioskPin: (branchId: string, pin: string) =>
+    request(`/api/branches/${encodeURIComponent(branchId)}/kiosk-verify`, {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
+    }),
 }
