@@ -23,6 +23,21 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 // ── Application services ──────────────────────────────────────────────────────
 builder.Services.AddScoped<WaitTimeEstimator>();
 builder.Services.AddScoped<QueueService>();
+builder.Services.AddHttpClient<SmsService>();
+builder.Services.AddSingleton<ISmsService, SmsService>();
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("join", o =>
+    {
+        o.PermitLimit = 3;
+        o.Window = TimeSpan.FromMinutes(1);
+        o.QueueLimit = 0;
+        o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 
 // ── JWT Authentication ────────────────────────────────────────────────────────
 var jwtSecret = builder.Configuration["Jwt:Secret"]
@@ -123,6 +138,8 @@ using (var scope = app.Services.CreateScope())
                 FOREIGN KEY ("BranchId") REFERENCES "Branches"("Id")
                 ON DELETE CASCADE
         );
+        ALTER TABLE "Branches" ADD COLUMN IF NOT EXISTS "Category" VARCHAR(50) NULL;
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "ViewedAt" TIMESTAMP NULL;
         """);
 }
 
@@ -139,5 +156,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<QueueHub>("/hubs/queue");
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 app.Run();

@@ -1,14 +1,14 @@
 import { useState } from 'react'
 
-const SERVICE_TYPES = ['Consultation', 'Cashier', 'New Account', 'Deposit', 'Withdrawal', 'Other']
-
 interface Props {
+  services: string[]
   onConfirm: (serviceType: string, customerName?: string) => void
   onCancel: () => void
 }
 
-export function WalkInModal({ onConfirm, onCancel }: Props) {
-  const [serviceType, setServiceType] = useState(SERVICE_TYPES[0])
+export function WalkInModal({ services, onConfirm, onCancel }: Props) {
+  const allServices = [...services, 'Other']
+  const [serviceType, setServiceType] = useState(services[0] ?? 'Other')
   const [custom, setCustom] = useState('')
   const [name, setName] = useState('')
 
@@ -22,7 +22,7 @@ export function WalkInModal({ onConfirm, onCancel }: Props) {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Service type</label>
           <div className="grid grid-cols-3 gap-2">
-            {SERVICE_TYPES.map(s => (
+            {allServices.map(s => (
               <button
                 key={s}
                 onClick={() => setServiceType(s)}

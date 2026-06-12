@@ -31,6 +31,7 @@ public class BranchesController(AppDbContext db) : ControllerBase
         {
             Id = req.Id,
             Name = req.Name,
+            Category = req.Category,
             Address = req.Address,
             City = req.City,
             MaxCapacity = req.MaxCapacity,
@@ -52,6 +53,7 @@ public class BranchesController(AppDbContext db) : ControllerBase
         if (branch == null) return NotFound();
 
         branch.Name = req.Name;
+        branch.Category = req.Category;
         branch.Address = req.Address;
         branch.City = req.City;
         branch.MaxCapacity = req.MaxCapacity;
@@ -64,6 +66,6 @@ public class BranchesController(AppDbContext db) : ControllerBase
     }
 
     private static BranchResponse Map(Branch b) => new(
-        b.Id, b.Name, b.Address, b.City, b.MaxCapacity, b.GraceMinutes,
+        b.Id, b.Name, b.Category, b.Address, b.City, b.MaxCapacity, b.GraceMinutes,
         b.OpensAt?.ToString("HH:mm"), b.ClosesAt?.ToString("HH:mm"));
 }

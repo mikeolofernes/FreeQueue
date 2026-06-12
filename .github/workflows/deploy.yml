@@ -1,0 +1,40 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to droplet
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/FreeQueue
+
+            echo "==> Pulling latest code..."
+            git pull origin main
+
+            echo "==> Building customer app..."
+            cd customer-app
+            npm install --silent
+            VITE_API_URL=https://freequeue.duckdns.org npm run build
+            cd ..
+
+            echo "==> Building staff app..."
+            cd staff-app
+            npm install --silent
+            VITE_API_URL=https://freequeue.duckdns.org VITE_CUSTOMER_URL=https://freequeue.duckdns.org npm run build
+            cd ..
+
+            echo "==> Restarting API..."
+            docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build api
+
+            echo "==> Deploy complete!"
