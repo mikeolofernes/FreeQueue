@@ -26,6 +26,7 @@ async function request<T>(path: string, init?: RequestInit, withAuth = false): P
     const text = await res.text()
     throw new Error(text || `HTTP ${res.status}`)
   }
+  if (res.status === 204) return null as T
   return res.json() as Promise<T>
 }
 
