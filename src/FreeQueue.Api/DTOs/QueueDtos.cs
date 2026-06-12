@@ -7,6 +7,12 @@ public record JoinQueueRequest(
     string? Phone
 );
 
+public record KioskJoinRequest(
+    string ServiceType,
+    string? CustomerName,
+    string? Phone
+);
+
 public record QrJoinRequest(
     string BranchId,
     string ServiceType,

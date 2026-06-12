@@ -40,6 +40,12 @@ export const api = {
       body: JSON.stringify({ branchId, serviceType, customerName, phone, qrSig, qrExp }),
     }),
 
+  kioskJoin: (branchId: string, serviceType: string, customerName: string, phone: string) =>
+    request<TicketResponse>(`/api/queue/${encodeURIComponent(branchId)}/kiosk-join`, {
+      method: 'POST',
+      body: JSON.stringify({ serviceType, customerName, phone }),
+    }),
+
   getQrToken: (branchId: string) =>
     request<{ exp: number; sig: string }>(`/api/queue/${encodeURIComponent(branchId)}/qr-token`, undefined, true),
 

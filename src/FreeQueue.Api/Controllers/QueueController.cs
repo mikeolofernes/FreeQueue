@@ -37,6 +37,18 @@ public class QueueController(QueueService queue, IConfiguration config) : Contro
         return Ok(new { exp, sig });
     }
 
+    [HttpPost("{branchId}/kiosk-join")]
+    public async Task<ActionResult<TicketResponse>> KioskJoin(string branchId, [FromBody] KioskJoinRequest req)
+    {
+        try
+        {
+            return Ok(await queue.JoinQueueAsync(
+                new JoinQueueRequest(branchId, req.ServiceType, req.CustomerName, req.Phone)));
+        }
+        catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+    }
+
     [HttpGet("ticket/{ticketId:int}")]
     public async Task<ActionResult<TicketResponse>> GetTicket(int ticketId)
     {
