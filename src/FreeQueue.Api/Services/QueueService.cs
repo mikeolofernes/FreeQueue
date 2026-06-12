@@ -307,10 +307,19 @@ public class QueueService(
 
     private async Task<int> NextTicketNumberAsync(string branchId)
     {
-        var max = await db.QueueTickets
-            .Where(t => t.BranchId == branchId && t.JoinedAt >= DateTime.UtcNow.Date)
-            .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
-        return max + 1;
+        var cache = redis.GetDatabase();
+        var key = $"ticket_seq:{branchId}";
+
+        // Seed from DB all-time max if key absent (first call or after Redis flush)
+        if (!await cache.KeyExistsAsync(key))
+        {
+            var dbMax = await db.QueueTickets
+                .Where(t => t.BranchId == branchId)
+                .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
+            await cache.StringSetAsync(key, dbMax, when: When.NotExists);
+        }
+
+        return (int)await cache.StringIncrementAsync(key);
     }
 
     private async Task<int> ActiveCountAsync(string branchId) =>
