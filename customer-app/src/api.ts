@@ -52,6 +52,18 @@ export const api = {
   leave: (ticketId: number) =>
     request<void>(`/api/queue/ticket/${ticketId}/leave`, { method: 'POST' }),
 
+  rateTicket: (ticketId: number, rating: number) =>
+    request<void>(`/api/queue/ticket/${ticketId}/rate`, {
+      method: 'POST',
+      body: JSON.stringify({ rating }),
+    }),
+
+  getStatusPublic: (branchId: string) =>
+    request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`),
+
+  lookupCustomer: (phone: string) =>
+    request<{ name: string | null }>(`/api/queue/customer/lookup?phone=${encodeURIComponent(phone)}`),
+
   // Staff (authenticated)
   login: (branchId: string, username: string, password: string) =>
     request<{ token: string; branchId: string; username: string }>('/api/auth/login', {

@@ -13,6 +13,7 @@ public class QueueTicket
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CalledAt { get; set; }
     public DateTime? ServedAt { get; set; }
+    public int? Rating { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Branch Branch { get; set; } = default!;

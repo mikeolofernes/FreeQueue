@@ -273,8 +273,29 @@ public class QueueService(
             .SendAsync("Broadcast", new { branchId, message });
     }
 
+    public async Task RateTicketAsync(int ticketId, int rating)
+    {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null) return;
+        ticket.Rating = Math.Clamp(rating, 1, 3);
+        await db.SaveChangesAsync();
+    }
+
+    public async Task<string?> LookupCustomerNameAsync(string phone)
+    {
+        return await db.QueueTickets
+            .Where(t => t.Phone == phone)
+            .OrderByDescending(t => t.JoinedAt)
+            .Select(t => t.CustomerName)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task NotifyTicketViewedAsync(int ticketId)
     {
+        var cache = redis.GetDatabase();
+        var key = $"ticket_viewed:{ticketId}";
+        if (!await cache.StringSetAsync(key, 1, TimeSpan.FromSeconds(10), when: When.NotExists))
+            return;
         await hub.Clients.Group(QueueHub.TicketGroup(ticketId))
             .SendAsync("TicketScanned", ticketId);
     }
@@ -295,15 +316,17 @@ public class QueueService(
     private async Task<int> NextTicketNumberAsync(string branchId)
     {
         var cache = redis.GetDatabase();
-        var key = $"ticket_seq:{branchId}";
+        var date = DateTime.UtcNow.ToString("yyyyMMdd");
+        var key = $"ticket_seq:{branchId}:{date}";
 
-        // Seed from DB all-time max if key absent (first call or after Redis flush)
         if (!await cache.KeyExistsAsync(key))
         {
-            var dbMax = await db.QueueTickets
-                .Where(t => t.BranchId == branchId)
+            var todayStart = DateTime.UtcNow.Date;
+            var todayMax = await db.QueueTickets
+                .Where(t => t.BranchId == branchId && t.JoinedAt >= todayStart)
                 .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
-            await cache.StringSetAsync(key, dbMax, when: When.NotExists);
+            await cache.StringSetAsync(key, todayMax, when: When.NotExists);
+            await cache.KeyExpireAsync(key, TimeSpan.FromDays(2));
         }
 
         return (int)await cache.StringIncrementAsync(key);

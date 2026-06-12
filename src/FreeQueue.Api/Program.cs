@@ -2,11 +2,13 @@ using FreeQueue.Api.Data;
 using FreeQueue.Api.Hubs;
 using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using StackExchange.Redis;
 using System.Text;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +44,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+
+// ── Rate limiting (kiosk-join: 10 req/min per IP) ─────────────────────────────
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("kiosk", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+    options.RejectionStatusCode = 429;
+});
 
 // ── SignalR ───────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
@@ -95,6 +107,10 @@ using (var scope = app.Services.CreateScope())
     // we run idempotent ALTER scripts so new tables/columns are always present.
     await ctx.Database.EnsureCreatedAsync();
     await ctx.Database.ExecuteSqlRawAsync("""
+        UPDATE "QueueTickets" SET "Status" = 'waiting' WHERE "Status" = 'away';
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "Rating" integer;
+        """);
+    await ctx.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS "StaffAccounts" (
             "Id"           SERIAL PRIMARY KEY,
             "BranchId"     VARCHAR(100) NOT NULL,
@@ -118,6 +134,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

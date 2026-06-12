@@ -2,6 +2,7 @@ using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FreeQueue.Api.Controllers;
 
@@ -11,6 +12,7 @@ public class QueueController(QueueService queue) : ControllerBase
 {
     // ── Customer endpoints (public) ───────────────────────────────────────────
 
+    [EnableRateLimiting("kiosk")]
     [HttpPost("{branchId}/kiosk-join")]
     public async Task<ActionResult<TicketResponse>> KioskJoin(string branchId, [FromBody] KioskJoinRequest req)
     {
@@ -28,6 +30,20 @@ public class QueueController(QueueService queue) : ControllerBase
     {
         try { return Ok(await queue.GetTicketAsync(ticketId)); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+    }
+
+    [HttpPost("ticket/{ticketId:int}/rate")]
+    public async Task<IActionResult> RateTicket(int ticketId, [FromBody] RateTicketRequest req)
+    {
+        await queue.RateTicketAsync(ticketId, req.Rating);
+        return Ok();
+    }
+
+    [HttpGet("customer/lookup")]
+    public async Task<ActionResult<object>> LookupCustomer([FromQuery] string phone)
+    {
+        var name = await queue.LookupCustomerNameAsync(phone);
+        return Ok(new { name });
     }
 
     [HttpPost("ticket/{ticketId:int}/viewed")]
