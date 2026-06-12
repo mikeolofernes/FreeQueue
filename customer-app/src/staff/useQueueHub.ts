@@ -16,6 +16,10 @@ export function useQueueHub({ branchId, onQueueAdvanced, onConnected, onDisconne
 
   const stableAdvanced = useRef(onQueueAdvanced)
   stableAdvanced.current = onQueueAdvanced
+  const stableConnected = useRef(onConnected)
+  stableConnected.current = onConnected
+  const stableDisconnected = useRef(onDisconnected)
+  stableDisconnected.current = onDisconnected
 
   const connect = useCallback(async () => {
     if (connRef.current) {
@@ -30,22 +34,22 @@ export function useQueueHub({ branchId, onQueueAdvanced, onConnected, onDisconne
 
     conn.on('QueueAdvanced', (status: QueueStatus) => stableAdvanced.current(status))
 
-    conn.onclose(() => onDisconnected())
-    conn.onreconnecting(() => onDisconnected())
+    conn.onclose(() => stableDisconnected.current())
+    conn.onreconnecting(() => stableDisconnected.current())
     conn.onreconnected(async () => {
       await conn.invoke('JoinBranch', branchId)
-      onConnected()
+      stableConnected.current()
     })
 
     try {
       await conn.start()
       await conn.invoke('JoinBranch', branchId)
       connRef.current = conn
-      onConnected()
+      stableConnected.current()
     } catch {
-      onDisconnected()
+      stableDisconnected.current()
     }
-  }, [branchId, onConnected, onDisconnected])
+  }, [branchId])
 
   useEffect(() => {
     connect()
