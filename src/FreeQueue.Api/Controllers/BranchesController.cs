@@ -74,8 +74,8 @@ public class BranchesController(AppDbContext db) : ControllerBase
         var branch = await db.Branches.FindAsync(id);
         if (branch == null) return NotFound();
         if (branch.KioskPin == null || branch.KioskPin == req.Pin.Trim())
-            return Ok();
-        return Unauthorized();
+            return Ok(new { valid = true });
+        return Unauthorized(new { valid = false });
     }
 
     [Authorize]
