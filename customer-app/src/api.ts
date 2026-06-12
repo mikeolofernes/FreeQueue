@@ -34,11 +34,14 @@ export const api = {
   getBranch: (branchId: string) =>
     request<BranchResponse>(`/api/branches/${encodeURIComponent(branchId)}`),
 
-  joinQueue: (branchId: string, serviceType: string, customerName: string, phone: string) =>
+  joinQueue: (branchId: string, serviceType: string, customerName: string, phone: string, qrSig: string, qrExp: number) =>
     request<TicketResponse>('/api/queue/join', {
       method: 'POST',
-      body: JSON.stringify({ branchId, serviceType, customerName, phone }),
+      body: JSON.stringify({ branchId, serviceType, customerName, phone, qrSig, qrExp }),
     }),
+
+  getQrToken: (branchId: string) =>
+    request<{ exp: number; sig: string }>(`/api/queue/${encodeURIComponent(branchId)}/qr-token`, undefined, true),
 
   getTicket: (ticketId: number) =>
     request<TicketResponse>(`/api/queue/ticket/${ticketId}`),

@@ -7,6 +7,15 @@ public record JoinQueueRequest(
     string? Phone
 );
 
+public record QrJoinRequest(
+    string BranchId,
+    string ServiceType,
+    string? CustomerName,
+    string? Phone,
+    string QrSig,
+    long QrExp
+);
+
 public record AdvanceQueueRequest(
     string BranchId,
     int TicketNumber,

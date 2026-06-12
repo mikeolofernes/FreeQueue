@@ -7,16 +7,34 @@ namespace FreeQueue.Api.Controllers;
 
 [ApiController]
 [Route("api/queue")]
-public class QueueController(QueueService queue) : ControllerBase
+public class QueueController(QueueService queue, IConfiguration config) : ControllerBase
 {
     // ── Customer endpoints (public) ───────────────────────────────────────────
 
     [HttpPost("join")]
-    public async Task<ActionResult<TicketResponse>> Join(JoinQueueRequest req)
+    public async Task<ActionResult<TicketResponse>> Join(QrJoinRequest req)
     {
-        try { return Ok(await queue.JoinQueueAsync(req)); }
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (now > req.QrExp)
+            return BadRequest("QR code has expired. Ask staff to refresh.");
+        if (!QrSigner.Verify(req.BranchId, req.QrExp, req.QrSig, config["Jwt:Secret"]!))
+            return BadRequest("Invalid QR code.");
+        try
+        {
+            return Ok(await queue.JoinQueueAsync(
+                new JoinQueueRequest(req.BranchId, req.ServiceType, req.CustomerName, req.Phone)));
+        }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+    }
+
+    [HttpGet("{branchId}/qr-token")]
+    [Authorize]
+    public IActionResult GetQrToken(string branchId)
+    {
+        var exp = DateTimeOffset.UtcNow.AddMinutes(2).ToUnixTimeSeconds();
+        var sig = QrSigner.Sign(branchId, exp, config["Jwt:Secret"]!);
+        return Ok(new { exp, sig });
     }
 
     [HttpGet("ticket/{ticketId:int}")]

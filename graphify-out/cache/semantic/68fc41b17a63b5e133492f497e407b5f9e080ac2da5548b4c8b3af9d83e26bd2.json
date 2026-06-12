@@ -1,0 +1,1 @@
+{"nodes": [{"id": "models_ticketstatus", "label": "TicketStatus Constants", "file_type": "code", "source_file": "src/FreeQueue.Api/Models/TicketStatus.cs", "source_location": "class TicketStatus", "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

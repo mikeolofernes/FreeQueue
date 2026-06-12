@@ -1,0 +1,252 @@
+{
+  "D:\\FreeQueue\\.claude\\settings.local.json": {
+    "mtime": 1781222349.953551,
+    "ast_hash": "703b704c2d5308b251d37df67d702aeb",
+    "semantic_hash": "703b704c2d5308b251d37df67d702aeb"
+  },
+  "D:\\FreeQueue\\customer-app\\package.json": {
+    "mtime": 1780729135.9077084,
+    "ast_hash": "4621f9a70b51363e02d7a41e4886581d",
+    "semantic_hash": "4621f9a70b51363e02d7a41e4886581d"
+  },
+  "D:\\FreeQueue\\customer-app\\postcss.config.js": {
+    "mtime": 1780729135.9077084,
+    "ast_hash": "533d2257147864eeb5581abdfa3ab151",
+    "semantic_hash": "533d2257147864eeb5581abdfa3ab151"
+  },
+  "D:\\FreeQueue\\customer-app\\src\\App.tsx": {
+    "mtime": 1780729135.9077084,
+    "ast_hash": "964806f507c733010500c6ff8500e8ae",
+    "semantic_hash": "964806f507c733010500c6ff8500e8ae"
+  },
+  "D:\\FreeQueue\\customer-app\\src\\api.ts": {
+    "mtime": 1780729135.9087086,
+    "ast_hash": "ba777296d612725054d757a7128fd596",
+    "semantic_hash": "ba777296d612725054d757a7128fd596"
+  },
+  "D:\\FreeQueue\\customer-app\\src\\main.tsx": {
+    "mtime": 1780729135.9087086,
+    "ast_hash": "a56f5f5e63ce8e2914b73b6b51f48230",
+    "semantic_hash": "a56f5f5e63ce8e2914b73b6b51f48230"
+  },
+  "D:\\FreeQueue\\customer-app\\src\\pages\\JoinPage.tsx": {
+    "mtime": 1780729135.9087086,
+    "ast_hash": "61822b5456a6154525fd1e9db370af11",
+    "semantic_hash": "61822b5456a6154525fd1e9db370af11"
+  },
+  "D:\\FreeQueue\\customer-app\\src\\pages\\TicketPage.tsx": {
+    "mtime": 1780729135.9087086,
+    "ast_hash": "19b699ea6f30fd619e8b0b2c69c352b8",
+    "semantic_hash": "19b699ea6f30fd619e8b0b2c69c352b8"
+  },
+  "D:\\FreeQueue\\customer-app\\src\\types.ts": {
+    "mtime": 1780729135.9087086,
+    "ast_hash": "985bb2b584ca1278e019933bc313125a",
+    "semantic_hash": "985bb2b584ca1278e019933bc313125a"
+  },
+  "D:\\FreeQueue\\customer-app\\src\\useTicketHub.ts": {
+    "mtime": 1780729135.9087086,
+    "ast_hash": "029fc4789c90c4f18ebb3da2cfb1a40e",
+    "semantic_hash": "029fc4789c90c4f18ebb3da2cfb1a40e"
+  },
+  "D:\\FreeQueue\\customer-app\\tailwind.config.js": {
+    "mtime": 1780729135.9087086,
+    "ast_hash": "9ccd36f473390803b7b156f1b3d36798",
+    "semantic_hash": "9ccd36f473390803b7b156f1b3d36798"
+  },
+  "D:\\FreeQueue\\customer-app\\tsconfig.json": {
+    "mtime": 1780729135.9087086,
+    "ast_hash": "32b1ccb5e123d519f96029df0bdc7848",
+    "semantic_hash": "32b1ccb5e123d519f96029df0bdc7848"
+  },
+  "D:\\FreeQueue\\customer-app\\vite.config.ts": {
+    "mtime": 1780731147.76704,
+    "ast_hash": "62c8dc50e26e7219792cae7394a53dfa",
+    "semantic_hash": "62c8dc50e26e7219792cae7394a53dfa"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Controllers\\AuthController.cs": {
+    "mtime": 1780730205.2856212,
+    "ast_hash": "1c254df38ec0658479ed3f5d1508089d",
+    "semantic_hash": "1c254df38ec0658479ed3f5d1508089d"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Controllers\\BranchesController.cs": {
+    "mtime": 1780722580.2698932,
+    "ast_hash": "3c0dd7c1f8fd2b523dc25624205e58ff",
+    "semantic_hash": "3c0dd7c1f8fd2b523dc25624205e58ff"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Controllers\\QueueController.cs": {
+    "mtime": 1780730948.7902346,
+    "ast_hash": "216ff4bdaa8d135637352f705d649763",
+    "semantic_hash": "216ff4bdaa8d135637352f705d649763"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\DTOs\\AuthDtos.cs": {
+    "mtime": 1780730205.2856212,
+    "ast_hash": "c364708de32f9b282a255a5822741f39",
+    "semantic_hash": "c364708de32f9b282a255a5822741f39"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\DTOs\\BranchDtos.cs": {
+    "mtime": 1780722580.2698932,
+    "ast_hash": "b07595c839fadfd9529ed45646a0854a",
+    "semantic_hash": "b07595c839fadfd9529ed45646a0854a"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\DTOs\\QueueDtos.cs": {
+    "mtime": 1780722580.2698932,
+    "ast_hash": "90d6bb87a3eafbed2249638eb13ddc67",
+    "semantic_hash": "90d6bb87a3eafbed2249638eb13ddc67"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Data\\AppDbContext.cs": {
+    "mtime": 1780730205.2856212,
+    "ast_hash": "22852d2e7df6390f6048910ff38af1e5",
+    "semantic_hash": "22852d2e7df6390f6048910ff38af1e5"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\FreeQueue.Api.csproj": {
+    "mtime": 1780730205.2856212,
+    "ast_hash": "50554c95f64e2263ce2a70b937aff5a8",
+    "semantic_hash": "50554c95f64e2263ce2a70b937aff5a8"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Hubs\\QueueHub.cs": {
+    "mtime": 1780722580.2698932,
+    "ast_hash": "179b99c79324ee1dd11df6b1f8fad233",
+    "semantic_hash": "179b99c79324ee1dd11df6b1f8fad233"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Models\\Branch.cs": {
+    "mtime": 1780722580.2698932,
+    "ast_hash": "42ff8d96be580df81fc1a4b8d8af8a2d",
+    "semantic_hash": "42ff8d96be580df81fc1a4b8d8af8a2d"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Models\\QueueTicket.cs": {
+    "mtime": 1780722580.2698932,
+    "ast_hash": "cdfa42e82da760c1084bc7e8dd5ea181",
+    "semantic_hash": "cdfa42e82da760c1084bc7e8dd5ea181"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Models\\QueueTransaction.cs": {
+    "mtime": 1780722580.2698932,
+    "ast_hash": "47debfca02ea781696b2d14cfe306a00",
+    "semantic_hash": "47debfca02ea781696b2d14cfe306a00"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Models\\StaffAccount.cs": {
+    "mtime": 1780730205.2856212,
+    "ast_hash": "04b1acc358fcb5abc38ed4dcfeb9148e",
+    "semantic_hash": "04b1acc358fcb5abc38ed4dcfeb9148e"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Models\\TicketStatus.cs": {
+    "mtime": 1780722580.2698932,
+    "ast_hash": "520b1cc44bfbbafcf8c361fc6ca18ebf",
+    "semantic_hash": "520b1cc44bfbbafcf8c361fc6ca18ebf"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Program.cs": {
+    "mtime": 1780733350.696873,
+    "ast_hash": "50157220e03b176a1d34576ce3748717",
+    "semantic_hash": "50157220e03b176a1d34576ce3748717"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Properties\\launchSettings.json": {
+    "mtime": 1780724514.6269207,
+    "ast_hash": "db719fb03cc7acd1fbac0a8036b1d4fc",
+    "semantic_hash": "db719fb03cc7acd1fbac0a8036b1d4fc"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Services\\QueueService.cs": {
+    "mtime": 1780730948.7902346,
+    "ast_hash": "1a49112a253dc40a35f1b215269810bb",
+    "semantic_hash": "1a49112a253dc40a35f1b215269810bb"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\Services\\WaitTimeEstimator.cs": {
+    "mtime": 1780722580.271404,
+    "ast_hash": "b5a4d77a200be4691eed4f1e89152f6f",
+    "semantic_hash": "b5a4d77a200be4691eed4f1e89152f6f"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\appsettings.Development.json": {
+    "mtime": 1780722580.271404,
+    "ast_hash": "c2a64b9854ba8160506488ddd3511af0",
+    "semantic_hash": "c2a64b9854ba8160506488ddd3511af0"
+  },
+  "D:\\FreeQueue\\src\\FreeQueue.Api\\appsettings.json": {
+    "mtime": 1780730205.2871385,
+    "ast_hash": "b19deb015c522a45d9d1a296db276f00",
+    "semantic_hash": "b19deb015c522a45d9d1a296db276f00"
+  },
+  "D:\\FreeQueue\\staff-app\\package.json": {
+    "mtime": 1780730205.2877061,
+    "ast_hash": "eee4da1228af09f70068b8180974b1f5",
+    "semantic_hash": "eee4da1228af09f70068b8180974b1f5"
+  },
+  "D:\\FreeQueue\\staff-app\\postcss.config.js": {
+    "mtime": 1780726690.5373635,
+    "ast_hash": "5b84f4567208c7c747079c0477373231",
+    "semantic_hash": "5b84f4567208c7c747079c0477373231"
+  },
+  "D:\\FreeQueue\\staff-app\\src\\App.tsx": {
+    "mtime": 1780730948.7912338,
+    "ast_hash": "490150798f4d0e1851ff7fda5ea3568b",
+    "semantic_hash": "490150798f4d0e1851ff7fda5ea3568b"
+  },
+  "D:\\FreeQueue\\staff-app\\src\\api.ts": {
+    "mtime": 1780730948.7912338,
+    "ast_hash": "94528e0b7312b81ac12885e9449d8862",
+    "semantic_hash": "94528e0b7312b81ac12885e9449d8862"
+  },
+  "D:\\FreeQueue\\staff-app\\src\\components\\ElapsedTimer.tsx": {
+    "mtime": 1780726690.5383635,
+    "ast_hash": "7a776dff044f2156a533a37afa3871b9",
+    "semantic_hash": "7a776dff044f2156a533a37afa3871b9"
+  },
+  "D:\\FreeQueue\\staff-app\\src\\components\\LoginScreen.tsx": {
+    "mtime": 1780730205.2877061,
+    "ast_hash": "89f61cbbfd71f0475dfa51ef6cec93de",
+    "semantic_hash": "89f61cbbfd71f0475dfa51ef6cec93de"
+  },
+  "D:\\FreeQueue\\staff-app\\src\\components\\QRModal.tsx": {
+    "mtime": 1780731147.76704,
+    "ast_hash": "f0bdb7ce1bba6e01c1fa16fb7248153f",
+    "semantic_hash": "f0bdb7ce1bba6e01c1fa16fb7248153f"
+  },
+  "D:\\FreeQueue\\staff-app\\src\\components\\WalkInModal.tsx": {
+    "mtime": 1780726690.5383635,
+    "ast_hash": "22d21b11ba9d075c9edbf1fa28499699",
+    "semantic_hash": "22d21b11ba9d075c9edbf1fa28499699"
+  },
+  "D:\\FreeQueue\\staff-app\\src\\main.tsx": {
+    "mtime": 1780726690.5393634,
+    "ast_hash": "f591cca7d8250bad287f0b750d4f78ad",
+    "semantic_hash": "f591cca7d8250bad287f0b750d4f78ad"
+  },
+  "D:\\FreeQueue\\staff-app\\src\\types.ts": {
+    "mtime": 1780726690.5393634,
+    "ast_hash": "adccb32840805d7125a3607f6205de8c",
+    "semantic_hash": "adccb32840805d7125a3607f6205de8c"
+  },
+  "D:\\FreeQueue\\staff-app\\src\\useQueueHub.ts": {
+    "mtime": 1780726690.5393634,
+    "ast_hash": "9d4421d726e283bdd2bcced7046b86d8",
+    "semantic_hash": "9d4421d726e283bdd2bcced7046b86d8"
+  },
+  "D:\\FreeQueue\\staff-app\\tailwind.config.js": {
+    "mtime": 1780726690.5393634,
+    "ast_hash": "a89c833eb3ce7bc2cabb804f749fd258",
+    "semantic_hash": "a89c833eb3ce7bc2cabb804f749fd258"
+  },
+  "D:\\FreeQueue\\staff-app\\tsconfig.json": {
+    "mtime": 1780726690.5398664,
+    "ast_hash": "32b1ccb5e123d519f96029df0bdc7848",
+    "semantic_hash": "32b1ccb5e123d519f96029df0bdc7848"
+  },
+  "D:\\FreeQueue\\staff-app\\vite.config.ts": {
+    "mtime": 1780731147.76704,
+    "ast_hash": "c2eb0838943be9044220554e5b830a73",
+    "semantic_hash": "c2eb0838943be9044220554e5b830a73"
+  },
+  "D:\\FreeQueue\\customer-app\\index.html": {
+    "mtime": 1780729135.9077084,
+    "ast_hash": "38f16665f99599867f559759631d9c60",
+    "semantic_hash": "38f16665f99599867f559759631d9c60"
+  },
+  "D:\\FreeQueue\\docker-compose.yml": {
+    "mtime": 1780722580.268391,
+    "ast_hash": "da0ec940acb417aef47fc6f7e13383ca",
+    "semantic_hash": "da0ec940acb417aef47fc6f7e13383ca"
+  },
+  "D:\\FreeQueue\\staff-app\\index.html": {
+    "mtime": 1780726690.5373635,
+    "ast_hash": "b50d3a640471b39ae104c42471ad3fd1",
+    "semantic_hash": "b50d3a640471b39ae104c42471ad3fd1"
+  }
+}
