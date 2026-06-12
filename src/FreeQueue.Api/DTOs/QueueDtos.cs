@@ -7,6 +7,12 @@ public record JoinQueueRequest(
     string? Phone
 );
 
+public record KioskJoinRequest(
+    string ServiceType,
+    string? CustomerName,
+    string? Phone
+);
+
 public record AdvanceQueueRequest(
     string BranchId,
     int TicketNumber,
@@ -55,3 +61,5 @@ public record WaitEstimateDto(
 );
 
 public record UndoResponse(bool Success, string Message);
+
+public record RateTicketRequest(int Rating);

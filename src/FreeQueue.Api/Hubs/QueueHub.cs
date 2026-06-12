@@ -16,6 +16,11 @@ public class QueueHub : Hub
     }
 
     public static string BranchGroup(string branchId) => $"branch:{branchId}";
+
+    public async Task JoinTicket(int ticketId)
+        => await Groups.AddToGroupAsync(Context.ConnectionId, TicketGroup(ticketId));
+
+    public static string TicketGroup(int ticketId) => $"ticket:{ticketId}";
 }
 
 // Events pushed to clients:

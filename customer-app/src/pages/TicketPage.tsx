@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useTicketHub } from '../useTicketHub'
@@ -24,7 +24,13 @@ export function TicketPage() {
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
   const [error, setError] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
-  const [actionLoading, setActionLoading] = useState(false)
+
+  const viewedRef = useRef(false)
+  useEffect(() => {
+    if (viewedRef.current) return
+    viewedRef.current = true
+    api.ticketViewed(id).catch(() => {})
+  }, [id])
 
   const refresh = useCallback(async () => {
     try {
@@ -37,16 +43,14 @@ export function TicketPage() {
 
   useEffect(() => { refresh() }, [refresh])
 
-  useTicketHub({
+  const { connected } = useTicketHub({
     branchId: ticket?.branchId ?? '',
     onUpdate: refresh,
   })
 
   async function handleAction(action: () => Promise<unknown>) {
-    setActionLoading(true)
     try { await action(); await refresh() }
     catch { /* keep UI stable on error */ }
-    finally { setActionLoading(false) }
   }
 
   function clearTicket() {
@@ -67,7 +71,7 @@ export function TicketPage() {
         <div>
           <div className="text-5xl mb-4">😕</div>
           <p className="text-gray-600">{error}</p>
-          <button onClick={() => navigate('/join')} className="mt-4 text-teal-brand underline text-sm">
+          <button onClick={() => navigate('/')} className="mt-4 text-teal-brand underline text-sm">
             Scan QR again
           </button>
         </div>
@@ -98,7 +102,7 @@ export function TicketPage() {
           <div className="text-5xl mb-4">👋</div>
           <p className="text-xl font-bold text-gray-700">You've left the queue</p>
           <p className="text-gray-400 text-sm mt-2">Scan the QR code to join again.</p>
-          <button onClick={() => navigate(`/join?branch=${ticket.branchId}`)} className="mt-6 bg-teal-brand text-white font-semibold px-6 py-3 rounded-xl">
+          <button onClick={() => navigate(`/kiosk?branch=${ticket.branchId}`)} className="mt-6 bg-teal-brand text-white font-semibold px-6 py-3 rounded-xl">
             Join Again
           </button>
         </div>
@@ -111,10 +115,13 @@ export function TicketPage() {
     stage === 'close' ? 'bg-amber-brand text-white' :
     'bg-white text-gray-900'
 
-  const isAway = ticket.status === 'away'
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-sm mx-auto">
+      {!connected && (
+        <div className="bg-amber-500 text-white text-center text-xs font-medium py-1.5 px-4">
+          Reconnecting…
+        </div>
+      )}
       {/* Header */}
       <div className="bg-teal-brand text-white px-6 pt-10 pb-5">
         <p className="text-teal-light text-xs font-semibold tracking-widest uppercase">Your Queue Ticket</p>
@@ -139,9 +146,19 @@ export function TicketPage() {
             #{ticket.ticketNumber}
           </div>
 
-          <div className={`text-sm font-medium mb-4 ${stage === 'far' ? 'text-gray-500' : 'opacity-80'}`}>
+          <div className={`text-sm font-medium mb-2 ${stage === 'far' ? 'text-gray-500' : 'opacity-80'}`}>
             {ticket.serviceType}
           </div>
+
+          {/* Wait estimate — prominent */}
+          {ticket.waitEstimate && (
+            <div className={`mb-3 ${stage !== 'far' ? 'opacity-90' : 'text-teal-brand'}`}>
+              <span className="text-2xl font-black">~{ticket.waitEstimate.estimatedMinutes} min</span>
+              <span className={`text-xs ml-2 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
+                {ticket.waitEstimate.confidence}
+              </span>
+            </div>
+          )}
 
           {/* Position */}
           <div className={`rounded-2xl px-4 py-3 ${stage === 'far' ? 'bg-gray-50' : 'bg-white/20'}`}>
@@ -161,43 +178,12 @@ export function TicketPage() {
             )}
           </div>
 
-          {/* Wait estimate */}
-          {ticket.waitEstimate && ticket.peopleAhead > 0 && (
-            <p className={`text-xs mt-3 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
-              ~{ticket.waitEstimate.estimatedMinutes} min estimated · {ticket.waitEstimate.confidence}
-            </p>
-          )}
         </div>
 
         {/* Status pill */}
         <div className="flex justify-center">
           <StatusPill status={ticket.status} />
         </div>
-
-        {/* Step Away / Check In toggle */}
-        {(stage === 'far' || stage === 'close') && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <p className="text-sm font-semibold text-gray-700 mb-1">
-              {isAway ? '📍 You\'re stepped away' : '🚶 Need to step out?'}
-            </p>
-            <p className="text-xs text-gray-400 mb-4">
-              {isAway
-                ? 'We\'re holding your spot. Tap below when you\'re back.'
-                : 'Grab a coffee or run an errand — we\'ll hold your spot and notify you.'}
-            </p>
-            <button
-              disabled={actionLoading}
-              onClick={() => handleAction(isAway ? () => api.checkIn(id) : () => api.stepAway(id))}
-              className={`w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 ${
-                isAway
-                  ? 'bg-teal-brand text-white hover:bg-teal-dark'
-                  : 'border-2 border-teal-brand text-teal-brand hover:bg-teal-brand hover:text-white'
-              }`}
-            >
-              {actionLoading ? '…' : isAway ? "✓ I'm back — Check In" : '🚶 Step Away'}
-            </button>
-          </div>
-        )}
 
         {/* Leave queue */}
         <div className="mt-auto">
@@ -230,7 +216,6 @@ export function TicketPage() {
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     waiting: { label: '⏳ Waiting', cls: 'bg-gray-100 text-gray-600' },
-    away:    { label: '🚶 Stepped away', cls: 'bg-amber-50 text-amber-dark border border-amber-brand' },
     near:    { label: '⚡ Almost your turn', cls: 'bg-amber-brand text-white' },
     arrived: { label: '✅ Checked in', cls: 'bg-green-100 text-green-700' },
   }

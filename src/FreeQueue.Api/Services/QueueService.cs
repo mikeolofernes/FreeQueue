@@ -110,9 +110,7 @@ public class QueueService(
                 .SendAsync("TicketUpdated", new { ticketId = next.Id, status = next.Status, peopleAhead = 0 });
         }
 
-        await BroadcastQueueStateAsync(req.BranchId);
-
-        return await GetQueueStatusAsync(req.BranchId);
+        return await BroadcastQueueStateAsync(req.BranchId);
     }
 
     // ── Call Next (no current ticket — start of session or after a gap) ──────
@@ -125,9 +123,8 @@ public class QueueService(
             next.Status = TicketStatus.Near;
             next.CalledAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
-            await BroadcastQueueStateAsync(branchId);
         }
-        return await GetQueueStatusAsync(branchId);
+        return await BroadcastQueueStateAsync(branchId);
     }
 
     // ── Walk-in ───────────────────────────────────────────────────────────────
@@ -139,22 +136,6 @@ public class QueueService(
     }
 
     // ── Ticket actions ────────────────────────────────────────────────────────
-
-    public async Task StepAwayAsync(int ticketId)
-    {
-        var ticket = await GetActiveTicketAsync(ticketId);
-        ticket.Status = TicketStatus.Away;
-        await db.SaveChangesAsync();
-        await BroadcastTicketUpdate(ticket);
-    }
-
-    public async Task CheckInAsync(int ticketId)
-    {
-        var ticket = await GetActiveTicketAsync(ticketId);
-        ticket.Status = TicketStatus.Arrived;
-        await db.SaveChangesAsync();
-        await BroadcastTicketUpdate(ticket);
-    }
 
     public async Task SkipAsync(int ticketId)
     {
@@ -254,7 +235,7 @@ public class QueueService(
                           && t.ServedAt >= DateTime.UtcNow.Date);
 
         var current = activeTickets.FirstOrDefault(t => t.Status == TicketStatus.Near || t.Status == TicketStatus.Arrived);
-        var waiting = activeTickets.Count(t => t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Away);
+        var waiting = activeTickets.Count(t => t.Status == TicketStatus.Waiting);
 
         WaitEstimateDto? estimate = null;
         if (current != null)
@@ -292,6 +273,33 @@ public class QueueService(
             .SendAsync("Broadcast", new { branchId, message });
     }
 
+    public async Task RateTicketAsync(int ticketId, int rating)
+    {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null) return;
+        ticket.Rating = Math.Clamp(rating, 1, 3);
+        await db.SaveChangesAsync();
+    }
+
+    public async Task<string?> LookupCustomerNameAsync(string phone)
+    {
+        return await db.QueueTickets
+            .Where(t => t.Phone == phone)
+            .OrderByDescending(t => t.JoinedAt)
+            .Select(t => t.CustomerName)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task NotifyTicketViewedAsync(int ticketId)
+    {
+        var cache = redis.GetDatabase();
+        var key = $"ticket_viewed:{ticketId}";
+        if (!await cache.StringSetAsync(key, 1, TimeSpan.FromSeconds(10), when: When.NotExists))
+            return;
+        await hub.Clients.Group(QueueHub.TicketGroup(ticketId))
+            .SendAsync("TicketScanned", ticketId);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task<QueueTicket> GetActiveTicketAsync(int ticketId)
@@ -307,10 +315,21 @@ public class QueueService(
 
     private async Task<int> NextTicketNumberAsync(string branchId)
     {
-        var max = await db.QueueTickets
-            .Where(t => t.BranchId == branchId && t.JoinedAt >= DateTime.UtcNow.Date)
-            .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
-        return max + 1;
+        var cache = redis.GetDatabase();
+        var date = DateTime.UtcNow.ToString("yyyyMMdd");
+        var key = $"ticket_seq:{branchId}:{date}";
+
+        if (!await cache.KeyExistsAsync(key))
+        {
+            var todayStart = DateTime.UtcNow.Date;
+            var todayMax = await db.QueueTickets
+                .Where(t => t.BranchId == branchId && t.JoinedAt >= todayStart)
+                .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
+            await cache.StringSetAsync(key, todayMax, when: When.NotExists);
+            await cache.KeyExpireAsync(key, TimeSpan.FromDays(2));
+        }
+
+        return (int)await cache.StringIncrementAsync(key);
     }
 
     private async Task<int> ActiveCountAsync(string branchId) =>
@@ -331,7 +350,7 @@ public class QueueService(
     private static TicketResponse MapTicket(QueueTicket t, int peopleAhead, WaitEstimateDto? estimate) =>
         new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate);
 
-    private async Task BroadcastQueueStateAsync(string branchId)
+    private async Task<QueueStatusResponse> BroadcastQueueStateAsync(string branchId)
     {
         var status = await GetQueueStatusAsync(branchId);
         await hub.Clients.Group(QueueHub.BranchGroup(branchId))
@@ -347,6 +366,8 @@ public class QueueService(
                     status.WaitEstimate.Confidence
                 });
         }
+
+        return status;
     }
 
     private async Task BroadcastTicketUpdate(QueueTicket ticket)

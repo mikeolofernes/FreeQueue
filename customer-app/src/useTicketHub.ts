@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import * as signalR from '@microsoft/signalr'
 
 const HUB_URL = `${import.meta.env.VITE_API_URL ?? ''}/hubs/queue`
@@ -8,9 +8,8 @@ interface Options {
   onUpdate: () => void
 }
 
-// Subscribes to branch-level SignalR events and calls onUpdate so the
-// ticket page can refetch its own state after any queue change.
-export function useTicketHub({ branchId, onUpdate }: Options) {
+export function useTicketHub({ branchId, onUpdate }: Options): { connected: boolean } {
+  const [connected, setConnected] = useState(false)
   const connRef = useRef<signalR.HubConnection | null>(null)
   const stableUpdate = useRef(onUpdate)
   stableUpdate.current = onUpdate
@@ -27,8 +26,11 @@ export function useTicketHub({ branchId, onUpdate }: Options) {
     conn.on('QueueAdvanced', () => stableUpdate.current())
     conn.on('TicketUpdated', () => stableUpdate.current())
 
+    conn.onreconnecting(() => setConnected(false))
+    conn.onclose(() => setConnected(false))
     conn.onreconnected(async () => {
       await conn.invoke('JoinBranch', branchId)
+      setConnected(true)
       stableUpdate.current()
     })
 
@@ -36,8 +38,9 @@ export function useTicketHub({ branchId, onUpdate }: Options) {
       await conn.start()
       await conn.invoke('JoinBranch', branchId)
       connRef.current = conn
+      setConnected(true)
     } catch {
-      // silent — will retry via withAutomaticReconnect
+      setConnected(false)
     }
   }, [branchId])
 
@@ -45,4 +48,6 @@ export function useTicketHub({ branchId, onUpdate }: Options) {
     connect()
     return () => { connRef.current?.stop() }
   }, [connect])
+
+  return { connected }
 }
