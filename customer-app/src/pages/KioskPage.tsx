@@ -132,14 +132,13 @@ export function KioskPage() {
     setLoading(true)
     setPinError('')
     try {
-      // Validate PIN by attempting a dry-run — use a probe join request won't work,
-      // so we verify by checking against the API on actual join. Instead, we store
-      // the PIN and let the first kiosk-join call reject it if wrong.
-      // For immediate feedback: try the branch endpoint and trust the PIN attempt;
-      // the join will fail with 401 if wrong.
+      await api.verifyKioskPin(branchId, pin)
       localStorage.setItem(kioskPinKey(branchId), pin)
       setKioskPin(pin)
       setScreen('idle')
+    } catch {
+      setPinError('Incorrect PIN. Please try again.')
+      setPinInput('')
     } finally {
       setLoading(false)
     }

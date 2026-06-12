@@ -26,3 +26,5 @@ public record BranchResponse(
 );
 
 public record SetKioskPinRequest(string? Pin);
+
+public record VerifyKioskPinRequest(string Pin);
