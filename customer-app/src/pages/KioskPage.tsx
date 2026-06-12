@@ -208,7 +208,7 @@ export function KioskPage() {
 
   // ── Ticket / QR ───────────────────────────────────────────────────────────
   if (screen === 'ticket' && ticket) {
-    const ticketUrl = `${window.location.origin}/ticket/${ticket.id}`
+    const ticketUrl = `${window.location.origin}/ticket/${ticket.id}${ticket.viewToken ? `?vt=${ticket.viewToken}` : ''}`
     return (
       <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-white text-center gap-6">
         <p className="text-teal-light text-lg font-medium tracking-wide uppercase">Your Queue Number</p>

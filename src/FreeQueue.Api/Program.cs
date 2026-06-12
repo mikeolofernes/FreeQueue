@@ -29,6 +29,7 @@ builder.Services.AddSingleton<ISmsService, SmsService>();
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 builder.Services.AddRateLimiter(options =>
 {
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddFixedWindowLimiter("join", o =>
     {
         o.PermitLimit = 3;
@@ -36,7 +37,10 @@ builder.Services.AddRateLimiter(options =>
         o.QueueLimit = 0;
         o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
     });
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("kiosk", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
 });
 
 // ── JWT Authentication ────────────────────────────────────────────────────────
@@ -60,15 +64,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// ── Rate limiting (kiosk-join: 10 req/min per IP) ─────────────────────────────
-builder.Services.AddRateLimiter(options =>
-{
-    options.AddPolicy("kiosk", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
-    options.RejectionStatusCode = 429;
-});
 
 // ── SignalR ───────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
@@ -140,6 +135,7 @@ using (var scope = app.Services.CreateScope())
         );
         ALTER TABLE "Branches" ADD COLUMN IF NOT EXISTS "Category" VARCHAR(50) NULL;
         ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "ViewedAt" TIMESTAMP NULL;
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "ViewToken" VARCHAR(32) NULL;
         """);
 }
 

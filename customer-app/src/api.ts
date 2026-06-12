@@ -43,14 +43,14 @@ export const api = {
   getTicket: (ticketId: number) =>
     request<TicketResponse>(`/api/queue/ticket/${ticketId}`),
 
-  ticketViewed: (ticketId: number) =>
-    request<void>(`/api/queue/ticket/${ticketId}/viewed`, { method: 'POST' }),
+  ticketViewed: (ticketId: number, vt?: string) =>
+    request<void>(`/api/queue/ticket/${ticketId}/viewed${vt ? `?vt=${encodeURIComponent(vt)}` : ''}`, { method: 'POST' }),
 
   skip: (ticketId: number) =>
     request<void>(`/api/queue/ticket/${ticketId}/skip`, { method: 'POST' }),
 
-  leave: (ticketId: number) =>
-    request<void>(`/api/queue/ticket/${ticketId}/leave`, { method: 'POST' }),
+  leave: (ticketId: number, vt?: string) =>
+    request<void>(`/api/queue/ticket/${ticketId}/leave${vt ? `?vt=${encodeURIComponent(vt)}` : ''}`, { method: 'POST' }),
 
   rateTicket: (ticketId: number, rating: number) =>
     request<void>(`/api/queue/ticket/${ticketId}/rate`, {

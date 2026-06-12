@@ -1,6 +1,7 @@
 using FreeQueue.Api.Data;
 using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,6 +22,7 @@ public class BranchesController(AppDbContext db) : ControllerBase
         return branch == null ? NotFound() : Map(branch);
     }
 
+    [Authorize]
     [HttpPost]
     public async Task<ActionResult<BranchResponse>> Create(CreateBranchRequest req)
     {
@@ -46,6 +48,7 @@ public class BranchesController(AppDbContext db) : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = branch.Id }, Map(branch));
     }
 
+    [Authorize]
     [HttpPut("{id}")]
     public async Task<ActionResult<BranchResponse>> Update(string id, CreateBranchRequest req)
     {

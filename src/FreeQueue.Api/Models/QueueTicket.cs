@@ -14,6 +14,7 @@ public class QueueTicket
     public DateTime? CalledAt { get; set; }
     public DateTime? ServedAt { get; set; }
     public int? Rating { get; set; }
+    public string? ViewToken { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Branch Branch { get; set; } = default!;

@@ -47,6 +47,7 @@ public class QueueService(
             CustomerName = req.CustomerName,
             Phone = req.Phone,
             Status = TicketStatus.Waiting,
+            ViewToken = Guid.NewGuid().ToString("N"),
         };
 
         db.QueueTickets.Add(ticket);
@@ -161,9 +162,11 @@ public class QueueService(
         await BroadcastQueueStateAsync(ticket.BranchId);
     }
 
-    public async Task LeaveQueueAsync(int ticketId)
+    public async Task LeaveQueueAsync(int ticketId, string? viewToken = null)
     {
         var ticket = await GetActiveTicketAsync(ticketId);
+        if (ticket.ViewToken != null && ticket.ViewToken != viewToken)
+            throw new UnauthorizedAccessException("Invalid view token.");
         ticket.Status = TicketStatus.Cancelled;
         await db.SaveChangesAsync();
         await BroadcastQueueStateAsync(ticket.BranchId);
@@ -290,8 +293,11 @@ public class QueueService(
             .FirstOrDefaultAsync();
     }
 
-    public async Task NotifyTicketViewedAsync(int ticketId)
+    public async Task NotifyTicketViewedAsync(int ticketId, string? viewToken = null)
     {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket?.ViewToken != null && ticket.ViewToken != viewToken) return;
+
         var cache = redis.GetDatabase();
         var key = $"ticket_viewed:{ticketId}";
         if (!await cache.StringSetAsync(key, 1, TimeSpan.FromSeconds(10), when: When.NotExists))
@@ -348,7 +354,7 @@ public class QueueService(
             .FirstOrDefaultAsync();
 
     private static TicketResponse MapTicket(QueueTicket t, int peopleAhead, WaitEstimateDto? estimate) =>
-        new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate);
+        new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate, t.ViewToken);
 
     private async Task<QueueStatusResponse> BroadcastQueueStateAsync(string branchId)
     {

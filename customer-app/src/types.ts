@@ -9,6 +9,7 @@ export interface TicketResponse {
   joinedAt: string
   waitEstimate: WaitEstimate | null
   viewedAt: string | null
+  viewToken: string | null
 }
 
 export interface WaitEstimate {

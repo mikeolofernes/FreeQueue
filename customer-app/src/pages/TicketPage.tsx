@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useTicketHub } from '../useTicketHub'
 import type { TicketResponse } from '../types'
@@ -19,7 +19,9 @@ const TICKET_KEY = (branchId: string) => `fq_ticket_${branchId}`
 export function TicketPage() {
   const { ticketId } = useParams<{ ticketId: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const id = Number(ticketId)
+  const vt = searchParams.get('vt') ?? undefined
 
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
   const [error, setError] = useState('')
@@ -29,7 +31,7 @@ export function TicketPage() {
   useEffect(() => {
     if (viewedRef.current) return
     viewedRef.current = true
-    api.ticketViewed(id).catch(() => {})
+    api.ticketViewed(id, vt).catch(() => {})
   }, [id])
 
   const refresh = useCallback(async () => {
@@ -59,7 +61,7 @@ export function TicketPage() {
 
   function handleLeaveConfirm() {
     handleAction(async () => {
-      await api.leave(id)
+      await api.leave(id, vt)
       clearTicket()
     })
     setConfirmLeave(false)

@@ -3,6 +3,7 @@ using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Claims;
 
 namespace FreeQueue.Api.Controllers;
 
@@ -47,16 +48,17 @@ public class QueueController(QueueService queue) : ControllerBase
     }
 
     [HttpPost("ticket/{ticketId:int}/viewed")]
-    public async Task<IActionResult> TicketViewed(int ticketId)
+    public async Task<IActionResult> TicketViewed(int ticketId, [FromQuery] string? vt)
     {
-        await queue.NotifyTicketViewedAsync(ticketId);
+        await queue.NotifyTicketViewedAsync(ticketId, vt);
         return Ok();
     }
 
     [HttpPost("ticket/{ticketId:int}/leave")]
-    public async Task<IActionResult> Leave(int ticketId)
+    public async Task<IActionResult> Leave(int ticketId, [FromQuery] string? vt)
     {
-        try { await queue.LeaveQueueAsync(ticketId); return Ok(); }
+        try { await queue.LeaveQueueAsync(ticketId, vt); return Ok(); }
+        catch (UnauthorizedAccessException ex) { return Unauthorized(ex.Message); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
     }
@@ -74,6 +76,7 @@ public class QueueController(QueueService queue) : ControllerBase
     [HttpPost("{branchId}/callnext")]
     public async Task<ActionResult<QueueStatusResponse>> CallNext(string branchId)
     {
+        if (CheckBranch(branchId) is { } denied) return denied;
         try { return Ok(await queue.CallNextAsync(branchId)); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
     }
@@ -82,6 +85,7 @@ public class QueueController(QueueService queue) : ControllerBase
     [HttpPost("advance")]
     public async Task<ActionResult<QueueStatusResponse>> Advance(AdvanceQueueRequest req)
     {
+        if (CheckBranch(req.BranchId) is { } denied) return denied;
         try { return Ok(await queue.AdvanceQueueAsync(req)); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
@@ -91,6 +95,7 @@ public class QueueController(QueueService queue) : ControllerBase
     [HttpPost("walkin")]
     public async Task<ActionResult<TicketResponse>> AddWalkIn(AddWalkInRequest req)
     {
+        if (CheckBranch(req.BranchId) is { } denied) return denied;
         try { return Ok(await queue.AddWalkInAsync(req)); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
@@ -98,14 +103,24 @@ public class QueueController(QueueService queue) : ControllerBase
 
     [Authorize]
     [HttpPost("{branchId}/undo")]
-    public async Task<ActionResult<UndoResponse>> Undo(string branchId) =>
-        Ok(await queue.UndoAsync(branchId));
+    public async Task<ActionResult<UndoResponse>> Undo(string branchId)
+    {
+        if (CheckBranch(branchId) is { } denied) return denied;
+        return Ok(await queue.UndoAsync(branchId));
+    }
 
     [Authorize]
     [HttpPost("{branchId}/broadcast")]
     public async Task<IActionResult> Broadcast(string branchId, [FromBody] BroadcastRequest req)
     {
+        if (CheckBranch(branchId) is { } denied) return denied;
         await queue.BroadcastMessageAsync(branchId, req.Message);
         return Ok();
+    }
+
+    private ActionResult? CheckBranch(string branchId)
+    {
+        var tokenBranch = User.FindFirstValue("branch_id");
+        return tokenBranch == branchId ? null : Forbid();
     }
 }

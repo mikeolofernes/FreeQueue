@@ -2,6 +2,7 @@ using BCrypt.Net;
 using FreeQueue.Api.Data;
 using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -31,8 +32,9 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
 
     /// <summary>
     /// Create or update a staff account for a branch.
-    /// In production, restrict this endpoint to an admin role.
+    /// Requires an existing staff JWT — prevents unauthenticated account creation.
     /// </summary>
+    [Authorize]
     [HttpPost("setup")]
     public async Task<IActionResult> Setup(SetPasswordRequest req)
     {
