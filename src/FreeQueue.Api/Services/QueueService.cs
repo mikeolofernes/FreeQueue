@@ -257,6 +257,9 @@ public class QueueService(
         if (current != null)
             estimate = await estimator.EstimateAsync(branchId, current.ServiceType, waiting);
 
+        var firstWaiting = activeTickets
+            .FirstOrDefault(t => t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Away);
+
         return new QueueStatusResponse(
             branchId,
             current?.TicketNumber,
@@ -264,7 +267,9 @@ public class QueueService(
             activeTickets.Count,
             servedToday,
             waiting,
-            estimate
+            estimate,
+            firstWaiting?.Id,
+            firstWaiting?.Status
         );
     }
 

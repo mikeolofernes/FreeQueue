@@ -109,6 +109,17 @@ export default function StaffApp() {
     }
   }
 
+  async function handleSkipAway() {
+    if (!status?.firstWaitingId) return
+    try {
+      await api.skip(status.firstWaitingId)
+      await refreshStatus()
+      showToast('↩ Skipped away customer')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Skip failed', 'err')
+    }
+  }
+
   if (!isLoggedIn) return <LoginScreen onLogin={handleLogin} />
 
   const isServing = status?.currentTicketNumber != null
@@ -176,7 +187,7 @@ export default function StaffApp() {
         </button>
       </div>
 
-      <div className="bg-white border-t border-gray-100 px-5 py-4 flex gap-3">
+      <div className="bg-white border-t border-gray-100 px-5 py-4 flex gap-3 flex-wrap">
         <button
           onClick={() => setShowWalkIn(true)}
           className="flex-1 py-3 rounded-xl border-2 border-teal-brand text-teal-brand font-semibold hover:bg-teal-brand hover:text-white transition-colors"
@@ -189,6 +200,14 @@ export default function StaffApp() {
         >
           ↩ Undo
         </button>
+        {!isServing && status?.firstWaitingStatus === 'away' && (
+          <button
+            onClick={handleSkipAway}
+            className="w-full py-3 rounded-xl border-2 border-amber-400 text-amber-700 font-semibold hover:bg-amber-50 transition-colors text-sm"
+          >
+            🚶 Skip stepped-away customer
+          </button>
+        )}
       </div>
 
       {showWalkIn && <WalkInModal onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}

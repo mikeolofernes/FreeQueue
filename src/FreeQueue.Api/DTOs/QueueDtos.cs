@@ -60,7 +60,9 @@ public record QueueStatusResponse(
     int ActiveCount,
     int ServedToday,
     int PeopleWaiting,
-    WaitEstimateDto? WaitEstimate
+    WaitEstimateDto? WaitEstimate,
+    int? FirstWaitingId,
+    string? FirstWaitingStatus
 );
 
 public record WaitEstimateDto(
