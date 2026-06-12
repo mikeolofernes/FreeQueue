@@ -289,6 +289,12 @@ public class QueueService(
             .SendAsync("Broadcast", new { branchId, message });
     }
 
+    public async Task NotifyTicketViewedAsync(int ticketId)
+    {
+        await hub.Clients.Group(QueueHub.TicketGroup(ticketId))
+            .SendAsync("TicketScanned", ticketId);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task<QueueTicket> GetActiveTicketAsync(int ticketId)

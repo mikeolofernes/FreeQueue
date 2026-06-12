@@ -80,6 +80,13 @@ public class QueueController(QueueService queue, IConfiguration config) : Contro
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
     }
 
+    [HttpPost("ticket/{ticketId:int}/viewed")]
+    public async Task<IActionResult> TicketViewed(int ticketId)
+    {
+        await queue.NotifyTicketViewedAsync(ticketId);
+        return Ok();
+    }
+
     [HttpPost("ticket/{ticketId:int}/leave")]
     public async Task<IActionResult> Leave(int ticketId)
     {

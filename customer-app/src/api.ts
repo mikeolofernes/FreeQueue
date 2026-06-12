@@ -52,6 +52,9 @@ export const api = {
   getTicket: (ticketId: number) =>
     request<TicketResponse>(`/api/queue/ticket/${ticketId}`),
 
+  ticketViewed: (ticketId: number) =>
+    request<void>(`/api/queue/ticket/${ticketId}/viewed`, { method: 'POST' }),
+
   stepAway: (ticketId: number) =>
     request<void>(`/api/queue/ticket/${ticketId}/stepaway`, { method: 'POST' }),
 

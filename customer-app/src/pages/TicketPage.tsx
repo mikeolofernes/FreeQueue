@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useTicketHub } from '../useTicketHub'
@@ -25,6 +25,13 @@ export function TicketPage() {
   const [error, setError] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+
+  const viewedRef = useRef(false)
+  useEffect(() => {
+    if (viewedRef.current) return
+    viewedRef.current = true
+    api.ticketViewed(id).catch(() => {})
+  }, [id])
 
   const refresh = useCallback(async () => {
     try {

@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
+import * as signalR from '@microsoft/signalr'
 import { api } from '../api'
 import type { TicketResponse } from '../types'
+
+const HUB_URL = `${window.location.origin}/hubs/queue`
 
 const SERVICE_TYPES = ['Consultation', 'Cashier', 'New Account', 'Deposit', 'Withdrawal']
 const RESET_SECS = 30
@@ -18,10 +21,13 @@ export function KioskPage() {
   const [error, setError] = useState('')
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
   const [countdown, setCountdown] = useState(RESET_SECS)
+  const [scanned, setScanned] = useState(false)
+  const connRef = useRef<signalR.HubConnection | null>(null)
 
   useEffect(() => {
     if (!ticket) return
     setCountdown(RESET_SECS)
+    setScanned(false)
     const t = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) { reset(); return RESET_SECS }
@@ -29,6 +35,24 @@ export function KioskPage() {
       })
     }, 1000)
     return () => clearInterval(t)
+  }, [ticket])
+
+  useEffect(() => {
+    if (!ticket) return
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl(HUB_URL)
+      .withAutomaticReconnect()
+      .configureLogging(signalR.LogLevel.None)
+      .build()
+    conn.on('TicketScanned', () => {
+      setScanned(true)
+      setTimeout(() => reset(), 2500)
+    })
+    conn.start()
+      .then(() => conn.invoke('JoinTicket', ticket.id))
+      .catch(() => {})
+    connRef.current = conn
+    return () => { conn.stop(); connRef.current = null }
   }, [ticket])
 
   function reset() {
@@ -64,6 +88,15 @@ export function KioskPage() {
 
   if (ticket) {
     const ticketUrl = `${window.location.origin}/ticket/${ticket.id}`
+    if (scanned) {
+      return (
+        <div className="min-h-screen bg-green-500 flex flex-col items-center justify-center p-8 text-white text-center gap-6">
+          <div className="text-[100px] leading-none">✓</div>
+          <p className="text-3xl font-black">QR Scanned!</p>
+          <p className="text-white/80 text-lg">See you at the counter.</p>
+        </div>
+      )
+    }
     return (
       <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-white text-center gap-6">
         <p className="text-teal-light text-lg font-medium tracking-wide uppercase">Your Queue Number</p>
