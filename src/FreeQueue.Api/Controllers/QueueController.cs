@@ -1,3 +1,4 @@
+using FreeQueue.Api.Data;
 using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +10,7 @@ namespace FreeQueue.Api.Controllers;
 
 [ApiController]
 [Route("api/queue")]
-public class QueueController(QueueService queue) : ControllerBase
+public class QueueController(QueueService queue, AppDbContext db) : ControllerBase
 {
     // ── Customer endpoints (public) ───────────────────────────────────────────
 
@@ -17,6 +18,11 @@ public class QueueController(QueueService queue) : ControllerBase
     [HttpPost("{branchId}/kiosk-join")]
     public async Task<ActionResult<TicketResponse>> KioskJoin(string branchId, [FromBody] KioskJoinRequest req)
     {
+        var branch = await db.Branches.FindAsync(branchId);
+        if (branch == null) return NotFound("Branch not found.");
+        if (branch.KioskPin != null && branch.KioskPin != req.KioskPin?.Trim())
+            return Unauthorized("Invalid kiosk PIN.");
+
         try
         {
             return Ok(await queue.JoinQueueAsync(

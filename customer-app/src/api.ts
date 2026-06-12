@@ -34,10 +34,10 @@ export const api = {
   getBranch: (branchId: string) =>
     request<BranchResponse>(`/api/branches/${encodeURIComponent(branchId)}`),
 
-  kioskJoin: (branchId: string, serviceType: string, customerName: string, phone: string) =>
+  kioskJoin: (branchId: string, serviceType: string, customerName: string, phone: string, kioskPin?: string) =>
     request<TicketResponse>(`/api/queue/${encodeURIComponent(branchId)}/kiosk-join`, {
       method: 'POST',
-      body: JSON.stringify({ serviceType, customerName, phone }),
+      body: JSON.stringify({ serviceType, customerName, phone, kioskPin }),
     }),
 
   getTicket: (ticketId: number) =>
@@ -103,4 +103,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ branchId, username, password }),
     }),
+
+  setKioskPin: (branchId: string, pin: string | null) =>
+    request(`/api/branches/${encodeURIComponent(branchId)}/kiosk-pin`, {
+      method: 'PUT',
+      body: JSON.stringify({ pin }),
+    }, true),
 }

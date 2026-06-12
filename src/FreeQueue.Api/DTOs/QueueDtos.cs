@@ -10,7 +10,8 @@ public record JoinQueueRequest(
 public record KioskJoinRequest(
     string ServiceType,
     string? CustomerName,
-    string? Phone
+    string? Phone,
+    string? KioskPin
 );
 
 public record AdvanceQueueRequest(

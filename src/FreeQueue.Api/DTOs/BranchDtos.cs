@@ -21,5 +21,8 @@ public record BranchResponse(
     int MaxCapacity,
     int GraceMinutes,
     string? OpensAt,
-    string? ClosesAt
+    string? ClosesAt,
+    bool HasKioskPin = false
 );
+
+public record SetKioskPinRequest(string? Pin);

@@ -26,6 +26,7 @@ export interface BranchResponse {
   city: string | null
   maxCapacity: number
   graceMinutes: number
+  hasKioskPin: boolean
 }
 
 export interface QueueStatus {

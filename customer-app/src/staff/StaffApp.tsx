@@ -4,19 +4,25 @@ import { useQueueHub } from './useQueueHub'
 import { LoginScreen } from './LoginScreen'
 import { WalkInModal } from './WalkInModal'
 import { ElapsedTimer } from './ElapsedTimer'
+import { getServiceTypes } from './serviceTypes'
 import type { QueueStatus } from '../types'
 
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
+const BRANCH_CATEGORY_KEY = 'fq_branch_category'
 
 export default function StaffApp() {
   const [branchId, setBranchId] = useState(() => localStorage.getItem(BRANCH_KEY) ?? '')
   const [branchName, setBranchName] = useState(() => localStorage.getItem(BRANCH_NAME_KEY) ?? '')
+  const [branchServices, setBranchServices] = useState(() =>
+    getServiceTypes(localStorage.getItem(BRANCH_CATEGORY_KEY)))
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!auth.getToken())
   const [status, setStatus] = useState<QueueStatus | null>(null)
   const [connected, setConnected] = useState(false)
   const [servingStartedAt, setServingStartedAt] = useState<Date | null>(null)
   const [showWalkIn, setShowWalkIn] = useState(false)
+  const [showPinSettings, setShowPinSettings] = useState(false)
+  const [pinInput, setPinInput] = useState('')
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const prevTicket = useRef<number | null>(null)
@@ -53,14 +59,20 @@ export default function StaffApp() {
     setBranchId(id)
     setBranchName(name)
     setIsLoggedIn(true)
+    api.getBranch(id).then(b => {
+      if (b.category) localStorage.setItem(BRANCH_CATEGORY_KEY, b.category)
+      setBranchServices(getServiceTypes(b.category))
+    }).catch(() => {})
   }
 
   function handleLogout() {
     auth.clearToken()
     localStorage.removeItem(BRANCH_KEY)
     localStorage.removeItem(BRANCH_NAME_KEY)
+    localStorage.removeItem(BRANCH_CATEGORY_KEY)
     setBranchId('')
     setBranchName('')
+    setBranchServices(getServiceTypes())
     setIsLoggedIn(false)
     setStatus(null)
   }
@@ -104,6 +116,18 @@ export default function StaffApp() {
       if (result.success) refreshStatus()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Undo failed', 'err')
+    }
+  }
+
+  async function handleSetKioskPin(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      await api.setKioskPin(branchId, pinInput.trim() || null)
+      showToast(pinInput.trim() ? '🔒 Kiosk PIN set' : '🔓 Kiosk PIN cleared')
+      setPinInput('')
+      setShowPinSettings(false)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to set PIN', 'err')
     }
   }
 
@@ -181,9 +205,39 @@ export default function StaffApp() {
         >
           ↩ Undo
         </button>
+        <button
+          onClick={() => setShowPinSettings(p => !p)}
+          className="py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition-colors"
+          title="Kiosk PIN"
+        >
+          🔒
+        </button>
       </div>
 
-      {showWalkIn && <WalkInModal onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
+      {showPinSettings && (
+        <div className="bg-white border-t border-gray-200 px-5 py-4">
+          <p className="text-sm font-semibold text-gray-700 mb-2">Kiosk PIN</p>
+          <p className="text-xs text-gray-400 mb-3">Set a PIN so only staff can unlock the kiosk. Leave blank to remove the PIN.</p>
+          <form onSubmit={handleSetKioskPin} className="flex gap-2">
+            <input
+              type="password"
+              inputMode="numeric"
+              className="flex-1 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-4 py-2 text-gray-900 outline-none transition-colors"
+              placeholder="New PIN (blank to clear)"
+              value={pinInput}
+              onChange={e => setPinInput(e.target.value)}
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-xl bg-teal-brand text-white font-semibold hover:bg-teal-dark transition-colors"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+      )}
+
+      {showWalkIn && <WalkInModal services={branchServices} onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
 
       {toast && (
         <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium z-50 ${

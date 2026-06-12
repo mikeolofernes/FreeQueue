@@ -68,7 +68,20 @@ public class BranchesController(AppDbContext db) : ControllerBase
         return Map(branch);
     }
 
+    [Authorize]
+    [HttpPut("{id}/kiosk-pin")]
+    public async Task<IActionResult> SetKioskPin(string id, [FromBody] SetKioskPinRequest req)
+    {
+        var branch = await db.Branches.FindAsync(id);
+        if (branch == null) return NotFound();
+
+        branch.KioskPin = string.IsNullOrWhiteSpace(req.Pin) ? null : req.Pin.Trim();
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
     private static BranchResponse Map(Branch b) => new(
         b.Id, b.Name, b.Category, b.Address, b.City, b.MaxCapacity, b.GraceMinutes,
-        b.OpensAt?.ToString("HH:mm"), b.ClosesAt?.ToString("HH:mm"));
+        b.OpensAt?.ToString("HH:mm"), b.ClosesAt?.ToString("HH:mm"),
+        HasKioskPin: b.KioskPin != null);
 }

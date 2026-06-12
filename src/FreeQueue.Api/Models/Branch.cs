@@ -11,6 +11,7 @@ public class Branch
     public int GraceMinutes { get; set; } = 15;
     public TimeOnly? OpensAt { get; set; }
     public TimeOnly? ClosesAt { get; set; }
+    public string? KioskPin { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<QueueTicket> Tickets { get; set; } = [];

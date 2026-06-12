@@ -5,6 +5,8 @@ import * as signalR from '@microsoft/signalr'
 import { api } from '../api'
 import type { TicketResponse, QueueStatus } from '../types'
 
+function kioskPinKey(branchId: string) { return `fq_kiosk_pin_${branchId}` }
+
 const HUB_URL = `${window.location.origin}/hubs/queue`
 const SERVICE_TYPES = ['Consultation', 'Cashier', 'New Account', 'Deposit', 'Withdrawal']
 const RESET_SECS = 30
@@ -12,13 +14,18 @@ const FORM_IDLE_SECS = 60
 const FORM_WARN_SECS = 10
 const STATUS_POLL_MS = 30_000
 
-type Screen = 'idle' | 'form' | 'ticket' | 'scanned' | 'csat'
+type Screen = 'pin' | 'idle' | 'form' | 'ticket' | 'scanned' | 'csat'
 
 export function KioskPage() {
   const [params] = useSearchParams()
   const branchId = params.get('branch') ?? ''
 
-  const [screen, setScreen] = useState<Screen>('idle')
+  const storedPin = branchId ? localStorage.getItem(kioskPinKey(branchId)) : null
+  const [screen, setScreen] = useState<Screen>(storedPin ? 'idle' : 'pin')
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState('')
+  const [hasKioskPin, setHasKioskPin] = useState(!!storedPin)
+  const [kioskPin, setKioskPin] = useState<string | null>(storedPin)
   const [serviceType, setServiceType] = useState(SERVICE_TYPES[0])
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -30,6 +37,17 @@ export function KioskPage() {
   const [branchStatus, setBranchStatus] = useState<QueueStatus | null>(null)
   const connRef = useRef<signalR.HubConnection | null>(null)
   const formTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Check if branch requires a kiosk PIN (only when we don't already have one stored)
+  useEffect(() => {
+    if (!branchId || storedPin) return
+    api.getBranch(branchId)
+      .then(b => {
+        setHasKioskPin(b.hasKioskPin)
+        if (!b.hasKioskPin) setScreen('idle')
+      })
+      .catch(() => {})
+  }, [branchId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function reset() {
     setTicket(null)
@@ -107,17 +125,47 @@ export function KioskPage() {
     return () => { if (formTimerRef.current) { clearInterval(formTimerRef.current); formTimerRef.current = null } }
   }, [screen, resetFormTimer])
 
+  async function handlePinSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const pin = pinInput.trim()
+    if (!pin) return
+    setLoading(true)
+    setPinError('')
+    try {
+      // Validate PIN by attempting a dry-run — use a probe join request won't work,
+      // so we verify by checking against the API on actual join. Instead, we store
+      // the PIN and let the first kiosk-join call reject it if wrong.
+      // For immediate feedback: try the branch endpoint and trust the PIN attempt;
+      // the join will fail with 401 if wrong.
+      localStorage.setItem(kioskPinKey(branchId), pin)
+      setKioskPin(pin)
+      setScreen('idle')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim() || !branchId) return
     setLoading(true)
     setError('')
     try {
-      const t = await api.kioskJoin(branchId, serviceType, name.trim(), phone.trim())
+      const t = await api.kioskJoin(branchId, serviceType, name.trim(), phone.trim(), kioskPin ?? undefined)
       setTicket(t)
       setScreen('ticket')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not join queue. Try again.')
+      const msg = err instanceof Error ? err.message : 'Could not join queue. Try again.'
+      if (msg.toLowerCase().includes('invalid kiosk pin') || msg.includes('401')) {
+        // PIN was wrong — clear stored PIN and force re-entry
+        localStorage.removeItem(kioskPinKey(branchId))
+        setKioskPin(null)
+        setScreen('pin')
+        setPinError('Incorrect PIN. Please try again.')
+        setPinInput('')
+      } else {
+        setError(msg)
+      }
     } finally {
       setLoading(false)
     }
@@ -140,6 +188,38 @@ export function KioskPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <p className="text-gray-500 text-center">Add <code>?branch=your-branch-id</code> to the URL.</p>
+      </div>
+    )
+  }
+
+  // ── PIN entry ─────────────────────────────────────────────────────────────
+  if (screen === 'pin' && hasKioskPin) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-8">
+        <form onSubmit={handlePinSubmit} className="w-full max-w-xs flex flex-col items-center gap-6">
+          <div className="text-center">
+            <div className="text-5xl mb-4">🔒</div>
+            <p className="text-white text-2xl font-bold">Kiosk Locked</p>
+            <p className="text-gray-400 text-sm mt-1">Enter the kiosk PIN to continue</p>
+          </div>
+          <input
+            type="password"
+            inputMode="numeric"
+            className="w-full text-center text-3xl font-bold tracking-widest border-2 border-gray-600 bg-gray-800 text-white rounded-xl px-5 py-4 outline-none focus:border-teal-brand"
+            placeholder="••••"
+            value={pinInput}
+            onChange={e => { setPinInput(e.target.value); setPinError('') }}
+            autoFocus
+          />
+          {pinError && <p className="text-red-400 text-sm text-center">{pinError}</p>}
+          <button
+            type="submit"
+            disabled={!pinInput.trim() || loading}
+            className="w-full py-4 rounded-xl bg-teal-brand hover:bg-teal-dark disabled:opacity-40 text-white text-lg font-bold transition-all"
+          >
+            Unlock
+          </button>
+        </form>
       </div>
     )
   }
