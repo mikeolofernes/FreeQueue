@@ -5,6 +5,7 @@ import { useTicketHub } from '../useTicketHub'
 import type { TicketResponse } from '../types'
 
 type Stage = 'far' | 'close' | 'next' | 'served' | 'cancelled'
+type PostServe = 'done' | 'csat' | 'thanks'
 
 function getStage(ticket: TicketResponse): Stage {
   if (ticket.status === 'served') return 'served'
@@ -26,6 +27,7 @@ export function TicketPage() {
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
   const [error, setError] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
+  const [postServe, setPostServe] = useState<PostServe>('done')
 
   const viewedRef = useRef(false)
   useEffect(() => {
@@ -74,7 +76,7 @@ export function TicketPage() {
           <div className="text-5xl mb-4">😕</div>
           <p className="text-gray-600">{error}</p>
           <button onClick={() => navigate('/')} className="mt-4 text-teal-brand underline text-sm">
-            Scan QR again
+            Go back
           </button>
         </div>
       </div>
@@ -93,7 +95,13 @@ export function TicketPage() {
 
   if (stage === 'served') {
     clearTicket()
-    return <DoneScreen ticket={ticket} onDismiss={() => navigate('/')} />
+    if (postServe === 'csat') {
+      return <CsatScreen ticketId={id} onDone={() => setPostServe('thanks')} />
+    }
+    if (postServe === 'thanks') {
+      return <ThankYouScreen />
+    }
+    return <DoneScreen ticket={ticket} onDone={() => setPostServe('csat')} />
   }
 
   if (stage === 'cancelled') {
@@ -103,10 +111,7 @@ export function TicketPage() {
         <div>
           <div className="text-5xl mb-4">👋</div>
           <p className="text-xl font-bold text-gray-700">You've left the queue</p>
-          <p className="text-gray-400 text-sm mt-2">Scan the QR code to join again.</p>
-          <button onClick={() => navigate(`/kiosk?branch=${ticket.branchId}`)} className="mt-6 bg-teal-brand text-white font-semibold px-6 py-3 rounded-xl">
-            Join Again
-          </button>
+          <p className="text-gray-400 text-sm mt-2">Scan the QR code at the counter to join again.</p>
         </div>
       </div>
     )
@@ -124,14 +129,12 @@ export function TicketPage() {
           Reconnecting…
         </div>
       )}
-      {/* Header */}
       <div className="bg-teal-brand text-white px-6 pt-10 pb-5">
         <p className="text-teal-light text-xs font-semibold tracking-widest uppercase">Your Queue Ticket</p>
         <p className="text-white font-semibold mt-1 text-sm">{ticket.branchId}</p>
       </div>
 
       <div className="flex-1 flex flex-col gap-4 px-5 py-5">
-        {/* Boarding-pass card */}
         <div className={`rounded-3xl shadow-lg p-7 text-center animate-bounce_in ${cardBg}`}>
           {stage === 'next' && (
             <div className="text-sm font-semibold tracking-widest uppercase mb-1 opacity-80">
@@ -152,7 +155,6 @@ export function TicketPage() {
             {ticket.serviceType}
           </div>
 
-          {/* Wait estimate — prominent */}
           {ticket.waitEstimate && (
             <div className={`mb-3 ${stage !== 'far' ? 'opacity-90' : 'text-teal-brand'}`}>
               <span className="text-2xl font-black">~{ticket.waitEstimate.estimatedMinutes} min</span>
@@ -162,7 +164,6 @@ export function TicketPage() {
             </div>
           )}
 
-          {/* Position */}
           <div className={`rounded-2xl px-4 py-3 ${stage === 'far' ? 'bg-gray-50' : 'bg-white/20'}`}>
             {ticket.peopleAhead === 0 ? (
               <p className={`text-lg font-bold ${stage !== 'far' ? 'text-white' : 'text-teal-brand'}`}>
@@ -179,15 +180,12 @@ export function TicketPage() {
               </>
             )}
           </div>
-
         </div>
 
-        {/* Status pill */}
         <div className="flex justify-center">
           <StatusPill status={ticket.status} />
         </div>
 
-        {/* Leave queue */}
         <div className="mt-auto">
           {confirmLeave ? (
             <div className="bg-red-50 rounded-2xl p-4 text-center space-y-3">
@@ -227,7 +225,7 @@ function StatusPill({ status }: { status: string }) {
   )
 }
 
-function DoneScreen({ ticket, onDismiss }: { ticket: TicketResponse; onDismiss: () => void }) {
+function DoneScreen({ ticket, onDone }: { ticket: TicketResponse; onDone: () => void }) {
   return (
     <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-center text-white">
       <div className="text-7xl mb-6">🎉</div>
@@ -235,11 +233,60 @@ function DoneScreen({ ticket, onDismiss }: { ticket: TicketResponse; onDismiss: 
       <p className="text-teal-light text-sm mb-1">Ticket #{ticket.ticketNumber}</p>
       <p className="text-teal-light text-sm">{ticket.serviceType}</p>
       <button
-        onClick={onDismiss}
+        onClick={onDone}
         className="mt-10 bg-white text-teal-brand font-bold px-8 py-3 rounded-2xl shadow-lg"
       >
         Done
       </button>
+    </div>
+  )
+}
+
+const CSAT_AUTO_SECS = 10
+
+function CsatScreen({ ticketId, onDone }: { ticketId: number; onDone: () => void }) {
+  const [countdown, setCountdown] = useState(CSAT_AUTO_SECS)
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(t); onDone(); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [onDone])
+
+  function handleRate(rating: number) {
+    api.rateTicket(ticketId, rating).catch(() => {})
+    onDone()
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-10 p-8 text-center">
+      <p className="text-2xl font-bold text-gray-800">How was your experience?</p>
+      <div className="flex gap-8">
+        {(['😐', '🙂', '😊'] as const).map((emoji, i) => (
+          <button
+            key={i}
+            onClick={() => handleRate(i + 1)}
+            className="text-[80px] hover:scale-110 active:scale-95 transition-transform"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+      <p className="text-gray-400 text-sm">Auto-closing in {countdown}s</p>
+    </div>
+  )
+}
+
+function ThankYouScreen() {
+  return (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center gap-4">
+      <div className="text-7xl">👋</div>
+      <h1 className="text-2xl font-black text-gray-800">Thank you!</h1>
+      <p className="text-gray-400 text-sm">See you next time.</p>
     </div>
   )
 }

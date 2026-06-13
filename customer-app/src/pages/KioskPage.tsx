@@ -13,7 +13,7 @@ const FORM_IDLE_SECS = 60
 const FORM_WARN_SECS = 10
 const STATUS_POLL_MS = 30_000
 
-type Screen = 'pin' | 'idle' | 'form' | 'ticket' | 'scanned' | 'csat' | 'closed' | 'served'
+type Screen = 'pin' | 'idle' | 'form' | 'ticket' | 'scanned' | 'closed' | 'served'
 
 export function KioskPage() {
   const [params] = useSearchParams()
@@ -112,20 +112,13 @@ export function KioskPage() {
       .configureLogging(signalR.LogLevel.None).build()
     conn.on('TicketScanned', () => {
       setScreen('scanned')
-      setTimeout(() => setScreen('csat'), 1500)
+      setTimeout(reset, 1500)
     })
     conn.onreconnected(() => { conn.invoke('JoinTicket', ticket.id).catch(() => {}) })
     conn.start().then(() => conn.invoke('JoinTicket', ticket.id)).catch(() => {})
     connRef.current = conn
     return () => { conn.stop(); connRef.current = null }
   }, [ticket])
-
-  // CSAT auto-dismiss
-  useEffect(() => {
-    if (screen !== 'csat') return
-    const t = setTimeout(reset, 8000)
-    return () => clearTimeout(t)
-  }, [screen])
 
   // Poll ticket status while showing ticket screen — transition to 'served' when done
   useEffect(() => {
@@ -199,11 +192,6 @@ export function KioskPage() {
       const result = await api.lookupCustomer(phone.trim())
       if (result.name) setName(result.name)
     } catch { /* silent */ }
-  }
-
-  function handleRate(rating: number) {
-    if (ticket) api.rateTicket(ticket.id, rating).catch(() => {})
-    setTimeout(reset, 800)
   }
 
   if (!branchId) {
@@ -305,27 +293,6 @@ export function KioskPage() {
   // ── Served ────────────────────────────────────────────────────────────────
   if (screen === 'served') {
     return <KioskServedScreen ticketNumber={ticket?.ticketNumber ?? 0} onReset={reset} />
-  }
-
-  // ── CSAT ──────────────────────────────────────────────────────────────────
-  if (screen === 'csat') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-10 p-8 text-center">
-        <p className="text-3xl font-bold text-gray-800">How was your experience?</p>
-        <div className="flex gap-10">
-          {(['😐', '🙂', '😊'] as const).map((emoji, i) => (
-            <button
-              key={i}
-              onClick={() => handleRate(i + 1)}
-              className="text-[90px] hover:scale-110 active:scale-95 transition-transform"
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-        <p className="text-gray-400 text-lg">Auto-closing in a moment…</p>
-      </div>
-    )
   }
 
   // ── Scanned ───────────────────────────────────────────────────────────────
