@@ -52,11 +52,8 @@ export function KioskPage() {
     api.getBranch(branchId)
       .then(b => {
         setHasKioskPin(b.hasKioskPin)
-        if (!b.isOpen) {
-          setScreen('closed')
-        } else if (!b.hasKioskPin) {
-          setScreen('idle')
-        }
+        if (!b.isOpen) setScreen('closed')
+        // Always stay on PIN screen — never auto-bypass to idle
       })
       .catch(() => {})
   }, [branchId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -234,7 +231,17 @@ export function KioskPage() {
   }
 
   // ── PIN entry ─────────────────────────────────────────────────────────────
-  if (screen === 'pin' && hasKioskPin) {
+  if (screen === 'pin') {
+    if (!hasKioskPin) {
+      return (
+        <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-8 text-center gap-6">
+          <div className="text-[80px]">🔒</div>
+          <p className="text-white text-3xl font-bold">Kiosk Locked</p>
+          <p className="text-gray-400 text-lg max-w-xs">No kiosk PIN is set for this branch. Set one in the Staff app to activate this kiosk.</p>
+          <a href="/staff" className="mt-4 px-8 py-4 rounded-2xl bg-teal-brand text-white text-xl font-bold">Staff Login</a>
+        </div>
+      )
+    }
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-8">
         <form onSubmit={handlePinSubmit} className="w-full max-w-sm flex flex-col items-center gap-8">

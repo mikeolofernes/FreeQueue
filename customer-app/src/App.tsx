@@ -16,12 +16,12 @@ function RootRedirect() {
       .then(r => r.json())
       .then((list: BranchResponse[]) => {
         if (list.length === 1) {
-          navigate(`/kiosk?branch=${encodeURIComponent(list[0].id)}`, { replace: true })
+          navigate(`/display?branch=${encodeURIComponent(list[0].id)}`, { replace: true })
         } else {
           setBranches(list)
         }
       })
-      .catch(() => navigate('/kiosk', { replace: true }))
+      .catch(() => navigate('/display', { replace: true }))
   }, [navigate])
 
   if (branches && branches.length !== 1) {
@@ -31,7 +31,7 @@ function RootRedirect() {
         {branches.map(b => (
           <a
             key={b.id}
-            href={`/kiosk?branch=${encodeURIComponent(b.id)}`}
+            href={`/display?branch=${encodeURIComponent(b.id)}`}
             className="w-full max-w-xs py-4 rounded-2xl bg-teal-brand text-white text-center text-lg font-bold shadow"
           >
             {b.name || b.id}
