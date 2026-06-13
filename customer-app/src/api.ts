@@ -114,10 +114,16 @@ export const api = {
 
   // Staff (authenticated)
   login: (username: string, password: string) =>
-    request<{ token: string; branchId: string; username: string; role: string }>('/api/auth/login', {
+    request<{ token: string; branchId: string; username: string; role: string; defaultKioskPin?: string | null }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     }),
+
+  setDefaultPin: (pin: string | null) =>
+    request<void>('/api/auth/default-pin', {
+      method: 'PUT',
+      body: JSON.stringify({ pin }),
+    }, true),
 
   getStatus: (branchId: string) =>
     request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`, undefined, true),

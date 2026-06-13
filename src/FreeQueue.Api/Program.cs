@@ -197,6 +197,10 @@ using (var scope = app.Services.CreateScope())
         CREATE UNIQUE INDEX IF NOT EXISTS "IX_QueueTickets_BranchId_QueueDate_TicketNumber"
             ON "QueueTickets"("BranchId", "QueueDate", "TicketNumber");
         """);
+
+    await ctx.Database.ExecuteSqlRawAsync("""
+        ALTER TABLE "StaffAccounts" ADD COLUMN IF NOT EXISTS "DefaultKioskPin" TEXT NULL;
+        """);
 }
 
 // Middleware pipeline

@@ -9,6 +9,7 @@ import type { QueueStatus, BranchService, AnalyticsData, Appointment } from '../
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
 const COUNTER_ID_KEY = 'fq_counter_id'
+const DEFAULT_PIN_KEY = 'fq_default_pin'
 
 type Panel = 'none' | 'pin' | 'services' | 'analytics' | 'appointments'
 
@@ -28,6 +29,8 @@ export default function StaffApp() {
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [defaultPin, setDefaultPin] = useState(() => localStorage.getItem(DEFAULT_PIN_KEY) ?? '')
+  const [defaultPinInput, setDefaultPinInput] = useState('')
   const [counterId, setCounterId] = useState(() => localStorage.getItem(COUNTER_ID_KEY) ?? '')
   const [editingCounterId, setEditingCounterId] = useState(false)
   const [counterIdInput, setCounterIdInput] = useState('')
@@ -70,10 +73,13 @@ export default function StaffApp() {
     onDisconnected: () => setConnected(false),
   })
 
-  function handleLogin(id: string) {
+  function handleLogin(id: string, defaultKioskPin?: string | null) {
     localStorage.setItem(BRANCH_KEY, id)
     setBranchId(id)
     setIsLoggedIn(true)
+    const pin = defaultKioskPin ?? ''
+    localStorage.setItem(DEFAULT_PIN_KEY, pin)
+    setDefaultPin(pin)
     api.getBranch(id).then(b => {
       localStorage.setItem(BRANCH_NAME_KEY, b.name)
       setBranchName(b.name)
@@ -84,9 +90,11 @@ export default function StaffApp() {
     auth.clearToken()
     localStorage.removeItem(BRANCH_KEY)
     localStorage.removeItem(BRANCH_NAME_KEY)
+    localStorage.removeItem(DEFAULT_PIN_KEY)
     setBranchId('')
     setBranchName('')
     setBranchServices([])
+    setDefaultPin('')
     setIsLoggedIn(false)
     setStatus(null)
     setActivePanel('none')
@@ -178,6 +186,20 @@ export default function StaffApp() {
       setActivePanel('none')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to set PIN', 'err')
+    }
+  }
+
+  async function handleSetDefaultPin(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      await api.setDefaultPin(defaultPinInput.trim() || null)
+      const val = defaultPinInput.trim()
+      localStorage.setItem(DEFAULT_PIN_KEY, val)
+      setDefaultPin(val)
+      setDefaultPinInput('')
+      showToast(val ? '🔒 Default PIN saved' : '🔓 Default PIN cleared')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to save default PIN', 'err')
     }
   }
 
@@ -418,22 +440,44 @@ export default function StaffApp() {
 
       {/* PIN panel */}
       {activePanel === 'pin' && (
-        <div className="bg-white border-t border-gray-200 px-5 py-4">
-          <p className="text-sm font-semibold text-gray-700 mb-2">Kiosk PIN</p>
-          <p className="text-xs text-gray-400 mb-3">Set a PIN so only staff can unlock the kiosk. Leave blank to remove.</p>
-          <form onSubmit={handleSetKioskPin} className="flex gap-2">
-            <input
-              type="password"
-              inputMode="numeric"
-              className="flex-1 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-4 py-2 text-gray-900 outline-none transition-colors"
-              placeholder="New PIN (blank to clear)"
-              value={pinInput}
-              onChange={e => setPinInput(e.target.value)}
-            />
-            <button type="submit" className="px-4 py-2 rounded-xl bg-teal-brand text-white font-semibold hover:bg-teal-dark transition-colors">
-              Save
-            </button>
-          </form>
+        <div className="bg-white border-t border-gray-200 px-5 py-4 space-y-5">
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-1">Kiosk PIN</p>
+            <p className="text-xs text-gray-400 mb-3">Lock the kiosk right now. Leave blank to remove.</p>
+            <form onSubmit={handleSetKioskPin} className="flex gap-2">
+              <input
+                type="password"
+                inputMode="numeric"
+                className="flex-1 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-4 py-2 text-gray-900 outline-none transition-colors"
+                placeholder="New PIN (blank to clear)"
+                value={pinInput}
+                onChange={e => setPinInput(e.target.value)}
+              />
+              <button type="submit" className="px-4 py-2 rounded-xl bg-teal-brand text-white font-semibold hover:bg-teal-dark transition-colors">
+                Set
+              </button>
+            </form>
+          </div>
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-sm font-semibold text-gray-700 mb-1">Default PIN</p>
+            <p className="text-xs text-gray-400 mb-3">
+              Saved to your account — automatically applied when you log in.
+              {defaultPin ? <span className="text-teal-brand ml-1">Current: {defaultPin}</span> : null}
+            </p>
+            <form onSubmit={handleSetDefaultPin} className="flex gap-2">
+              <input
+                type="password"
+                inputMode="numeric"
+                className="flex-1 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-4 py-2 text-gray-900 outline-none transition-colors"
+                placeholder="New default PIN (blank to clear)"
+                value={defaultPinInput}
+                onChange={e => setDefaultPinInput(e.target.value)}
+              />
+              <button type="submit" className="px-4 py-2 rounded-xl bg-teal-brand text-white font-semibold hover:bg-teal-dark transition-colors">
+                Save
+              </button>
+            </form>
+          </div>
         </div>
       )}
 

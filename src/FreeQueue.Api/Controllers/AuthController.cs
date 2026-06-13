@@ -26,8 +26,31 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
         if (account == null || !BCrypt.Net.BCrypt.Verify(req.Password, account.PasswordHash))
             return Unauthorized("Invalid username or password.");
 
+        // Auto-apply default kiosk PIN to the branch on login
+        if (account.DefaultKioskPin != null)
+        {
+            var branch = await db.Branches.FindAsync(account.BranchId);
+            if (branch != null && branch.KioskPin != account.DefaultKioskPin)
+            {
+                branch.KioskPin = account.DefaultKioskPin;
+                await db.SaveChangesAsync();
+            }
+        }
+
         var token = BuildToken(account.BranchId, account.Username, account.Role);
-        return new LoginResponse(token, account.BranchId, account.Username, account.Role);
+        return new LoginResponse(token, account.BranchId, account.Username, account.Role, account.DefaultKioskPin);
+    }
+
+    [Authorize]
+    [HttpPut("default-pin")]
+    public async Task<IActionResult> SetDefaultPin([FromBody] SetDefaultPinRequest req)
+    {
+        var username = User.FindFirstValue(ClaimTypes.Name);
+        var account = await db.StaffAccounts.FirstOrDefaultAsync(a => a.Username == username);
+        if (account == null) return NotFound();
+        account.DefaultKioskPin = string.IsNullOrWhiteSpace(req.Pin) ? null : req.Pin.Trim();
+        await db.SaveChangesAsync();
+        return NoContent();
     }
 
     private string BuildToken(string branchId, string username, string role)

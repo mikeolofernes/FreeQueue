@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { api, auth } from '../api'
 
 interface Props {
-  onLogin: (branchId: string) => void
+  onLogin: (branchId: string, defaultKioskPin?: string | null) => void
 }
 
 export function LoginScreen({ onLogin }: Props) {
@@ -18,7 +18,7 @@ export function LoginScreen({ onLogin }: Props) {
     try {
       const res = await api.login(username.trim(), password)
       auth.setToken(res.token)
-      onLogin(res.branchId)
+      onLogin(res.branchId, res.defaultKioskPin)
     } catch {
       setError('Wrong username or password.')
     } finally {

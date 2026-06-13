@@ -62,6 +62,7 @@ jobs:
             DROP INDEX IF EXISTS "IX_QueueTickets_BranchId_TicketNumber";
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_QueueTickets_BranchId_QueueDate_TicketNumber"
                 ON "QueueTickets"("BranchId", "QueueDate", "TicketNumber");
+            ALTER TABLE "StaffAccounts" ADD COLUMN IF NOT EXISTS "DefaultKioskPin" TEXT NULL;
             SQLEOF
             docker cp /tmp/migrate.sql freequeue-postgres-1:/tmp/migrate.sql
             docker exec freequeue-postgres-1 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /tmp/migrate.sql
