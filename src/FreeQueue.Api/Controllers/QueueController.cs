@@ -18,19 +18,24 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
     [HttpPost("{branchId}/kiosk-join")]
     public async Task<ActionResult<TicketResponse>> KioskJoin(string branchId, [FromBody] KioskJoinRequest req)
     {
-        var branch = await db.Branches.FindAsync(branchId);
-        if (branch == null) return NotFound("Branch not found.");
-        if (!branch.IsOpen) return BadRequest("Queue is currently closed.");
-        if (branch.KioskPin != null && branch.KioskPin != req.KioskPin?.Trim())
-            return Unauthorized("Invalid kiosk PIN.");
-
         try
         {
+            var branch = await db.Branches.FindAsync(branchId);
+            if (branch == null) return NotFound("Branch not found.");
+            if (!branch.IsOpen) return BadRequest("Queue is currently closed.");
+            if (branch.KioskPin != null && branch.KioskPin != req.KioskPin?.Trim())
+                return Unauthorized("Invalid kiosk PIN.");
+
             return Ok(await queue.JoinQueueAsync(
                 new JoinQueueRequest(branchId, req.ServiceType, req.CustomerName, req.Phone)));
         }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+        {
+            var inner = ex.InnerException?.Message ?? ex.Message;
+            return StatusCode(500, $"Database error: {inner}");
+        }
     }
 
     [HttpGet("ticket/{ticketId:int}")]
