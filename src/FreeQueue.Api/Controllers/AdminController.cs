@@ -17,6 +17,7 @@ namespace FreeQueue.Api.Controllers;
 public class AdminController(AppDbContext db, IConfiguration config) : ControllerBase
 {
     [HttpPost("login")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("admin-login")]
     public ActionResult<AdminLoginResponse> Login([FromBody] AdminLoginRequest req)
     {
         var adminPassword = config["Admin:Password"];
