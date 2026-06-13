@@ -93,7 +93,7 @@ export function TicketPage() {
 
   if (stage === 'served') {
     clearTicket()
-    return <DoneScreen ticket={ticket} onDismiss={() => { clearTicket(); navigate('/join') }} />
+    return <DoneScreen ticket={ticket} onDismiss={() => navigate(`/kiosk?branch=${ticket.branchId}`)} />
   }
 
   if (stage === 'cancelled') {
@@ -227,19 +227,34 @@ function StatusPill({ status }: { status: string }) {
   )
 }
 
+const DONE_COUNTDOWN = 8
+
 function DoneScreen({ ticket, onDismiss }: { ticket: TicketResponse; onDismiss: () => void }) {
+  const [countdown, setCountdown] = useState(DONE_COUNTDOWN)
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(t); onDismiss(); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [onDismiss])
+
   return (
     <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-center text-white">
       <div className="text-7xl mb-6">🎉</div>
       <h1 className="text-3xl font-black mb-2">You've been served!</h1>
       <p className="text-teal-light text-sm mb-1">Ticket #{ticket.ticketNumber}</p>
-      <p className="text-teal-light text-sm">{ticket.serviceType}</p>
+      <p className="text-teal-light text-sm mb-8">{ticket.serviceType}</p>
       <button
         onClick={onDismiss}
-        className="mt-10 bg-white text-teal-brand font-bold px-8 py-3 rounded-2xl shadow-lg"
+        className="bg-white text-teal-brand font-bold px-10 py-4 rounded-2xl shadow-lg text-lg"
       >
         Done
       </button>
+      <p className="mt-5 text-teal-light text-sm">Returning to kiosk in {countdown}s…</p>
     </div>
   )
 }
