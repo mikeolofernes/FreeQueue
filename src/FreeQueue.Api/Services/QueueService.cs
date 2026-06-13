@@ -398,7 +398,7 @@ public class QueueService(
             .Where(t => t.BranchId == branchId && t.Status == TicketStatus.Waiting)
             .OrderByDescending(t => t.Priority)
             .ThenBy(t => t.TicketNumber)
-            .Skip(0)
+            .Skip(1)
             .FirstOrDefaultAsync();
 
         if (second?.Phone == null) return;

@@ -4,10 +4,11 @@ import { useQueueHub } from './useQueueHub'
 import { LoginScreen } from './LoginScreen'
 import { WalkInModal } from './WalkInModal'
 import { ElapsedTimer } from './ElapsedTimer'
-import type { QueueStatus, BranchService, AnalyticsData } from '../types'
+import type { QueueStatus, BranchService, AnalyticsData, Appointment } from '../types'
 
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
+const COUNTER_ID_KEY = 'fq_counter_id'
 
 type Panel = 'none' | 'pin' | 'services' | 'analytics' | 'appointments'
 
@@ -27,6 +28,11 @@ export default function StaffApp() {
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [counterId, setCounterId] = useState(() => localStorage.getItem(COUNTER_ID_KEY) ?? '')
+  const [editingCounterId, setEditingCounterId] = useState(false)
+  const [counterIdInput, setCounterIdInput] = useState('')
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [appointments, setAppointments] = useState<Appointment[] | null>(null)
   const prevTicket = useRef<number | null>(null)
 
   const showToast = useCallback((msg: string, type: 'ok' | 'err' = 'ok') => {
@@ -91,12 +97,12 @@ export default function StaffApp() {
     setAdvancing(true)
     try {
       if (!status?.currentTicketNumber || !status.currentServiceType) {
-        const next = await api.callNext(branchId)
+        const next = await api.callNext(branchId, counterId || undefined)
         setStatus(next)
         showToast('▶ Called first customer')
       } else {
         const duration = servingStartedAt ? Math.floor((Date.now() - servingStartedAt.getTime()) / 1000) : 0
-        const next = await api.advance(branchId, status.currentTicketNumber, status.currentServiceType, duration)
+        const next = await api.advance(branchId, status.currentTicketNumber, status.currentServiceType, duration, counterId || undefined)
         setStatus(next)
         showToast(`✓ Ticket #${status.currentTicketNumber} done — called next`)
       }
@@ -147,6 +153,19 @@ export default function StaffApp() {
       showToast(res.isOpen ? '🟢 Queue opened' : '🔴 Queue closed')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed', 'err')
+    }
+  }
+
+  async function handleTransfer(newServiceType: string) {
+    const ticketId = status?.currentTicketId
+    if (!ticketId) return
+    setShowTransfer(false)
+    try {
+      await api.transferTicket(ticketId, newServiceType)
+      showToast(`↔ Transferred to ${newServiceType}`)
+      refreshStatus()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Transfer failed', 'err')
     }
   }
 
@@ -203,10 +222,37 @@ export default function StaffApp() {
     }
   }
 
+  async function handleLoadAppointments() {
+    try {
+      const data = await api.getAppointments(branchId)
+      setAppointments(data)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to load appointments', 'err')
+    }
+  }
+
+  async function handleUpdateAppointmentStatus(id: number, newStatus: string) {
+    try {
+      await api.updateAppointmentStatus(branchId, id, newStatus)
+      setAppointments(prev => prev ? prev.map(a => a.id === id ? { ...a, status: newStatus } : a) : prev)
+      showToast(`✓ Appointment ${newStatus}`)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update appointment', 'err')
+    }
+  }
+
+  function saveCounterId() {
+    const val = counterIdInput.trim()
+    localStorage.setItem(COUNTER_ID_KEY, val)
+    setCounterId(val)
+    setEditingCounterId(false)
+  }
+
   function togglePanel(p: Panel) {
     if (activePanel === p) { setActivePanel('none'); return }
     setActivePanel(p)
     if (p === 'analytics') handleLoadAnalytics()
+    if (p === 'appointments') handleLoadAppointments()
   }
 
   if (!isLoggedIn) return <LoginScreen onLogin={handleLogin} />
@@ -222,7 +268,29 @@ export default function StaffApp() {
           <h1 className="font-bold text-lg leading-none">QueueFree</h1>
           <p className="text-teal-light text-sm mt-0.5 truncate max-w-[160px]">{branchName || branchId}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {editingCounterId ? (
+            <div className="flex items-center gap-1">
+              <input
+                className="w-20 text-xs px-2 py-1 rounded-lg bg-white/20 border border-white/40 text-white placeholder-white/50 outline-none"
+                placeholder="Counter ID"
+                value={counterIdInput}
+                onChange={e => setCounterIdInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveCounterId(); if (e.key === 'Escape') setEditingCounterId(false) }}
+                autoFocus
+              />
+              <button onClick={saveCounterId} className="text-white text-xs px-1.5 py-1 rounded bg-white/20 hover:bg-white/30">✓</button>
+              <button onClick={() => setEditingCounterId(false)} className="text-white/60 text-xs px-1 py-1">✕</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setCounterIdInput(counterId); setEditingCounterId(true) }}
+              className="text-xs text-teal-light hover:text-white px-2 py-1 rounded-lg hover:bg-white/10 transition-colors"
+              title="Set counter ID"
+            >
+              {counterId ? `📍 ${counterId}` : '+ Counter'}
+            </button>
+          )}
           <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-gray-400'}`} />
           <button onClick={handleLogout} className="text-teal-light hover:text-white text-xs transition-colors">
             Logout
@@ -279,14 +347,21 @@ export default function StaffApp() {
           {advancing ? 'Advancing…' : isServing ? '✓  Done — Call Next' : '▶  Call First Customer'}
         </button>
 
-        {/* No-show button */}
         {isServing && (
-          <button
-            onClick={handleNoShow}
-            className="w-full py-3 rounded-xl border-2 border-red-200 text-red-500 font-semibold hover:bg-red-50 transition-colors text-sm"
-          >
-            ✗ No-show — Skip &amp; Call Next
-          </button>
+          <div className="w-full flex gap-2">
+            <button
+              onClick={handleNoShow}
+              className="flex-1 py-3 rounded-xl border-2 border-red-200 text-red-500 font-semibold hover:bg-red-50 transition-colors text-sm"
+            >
+              ✗ No-show
+            </button>
+            <button
+              onClick={() => setShowTransfer(true)}
+              className="flex-1 py-3 rounded-xl border-2 border-blue-200 text-blue-600 font-semibold hover:bg-blue-50 transition-colors text-sm"
+            >
+              ↔ Transfer
+            </button>
+          </div>
         )}
       </div>
 
@@ -331,6 +406,13 @@ export default function StaffApp() {
           title="Analytics"
         >
           📊
+        </button>
+        <button
+          onClick={() => togglePanel('appointments')}
+          className={`py-3 px-3 rounded-xl border-2 font-semibold transition-colors text-sm ${activePanel === 'appointments' ? 'border-teal-brand bg-teal-brand text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          title="Appointments"
+        >
+          📅
         </button>
       </div>
 
@@ -461,7 +543,88 @@ export default function StaffApp() {
         </div>
       )}
 
+      {/* Appointments panel */}
+      {activePanel === 'appointments' && (
+        <div className="bg-white border-t border-gray-200 px-5 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-700">Appointments</p>
+            <button onClick={handleLoadAppointments} className="text-xs text-teal-brand hover:text-teal-dark">Refresh</button>
+          </div>
+          {appointments === null ? (
+            <p className="text-sm text-gray-400 text-center py-4">Loading…</p>
+          ) : appointments.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">No upcoming appointments</p>
+          ) : (
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {appointments.map(a => (
+                <div key={a.id} className="border border-gray-100 rounded-xl p-3 space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-sm text-gray-800">{a.customerName}</p>
+                      <p className="text-xs text-gray-500">{a.serviceType}</p>
+                    </div>
+                    <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
+                      a.status === 'confirmed' ? 'bg-blue-50 text-blue-600' :
+                      a.status === 'arrived' ? 'bg-amber-50 text-amber-600' :
+                      a.status === 'completed' ? 'bg-green-50 text-green-600' :
+                      a.status === 'cancelled' ? 'bg-red-50 text-red-500' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>{a.status}</span>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    {new Date(a.scheduledAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  {a.notes && <p className="text-xs text-gray-400 italic">{a.notes}</p>}
+                  {a.status === 'pending' && (
+                    <div className="flex gap-1.5 pt-1">
+                      <button onClick={() => handleUpdateAppointmentStatus(a.id, 'confirmed')} className="flex-1 text-xs py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">Confirm</button>
+                      <button onClick={() => handleUpdateAppointmentStatus(a.id, 'cancelled')} className="flex-1 text-xs py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors">Cancel</button>
+                    </div>
+                  )}
+                  {a.status === 'confirmed' && (
+                    <div className="flex gap-1.5 pt-1">
+                      <button onClick={() => handleUpdateAppointmentStatus(a.id, 'arrived')} className="flex-1 text-xs py-1 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors">Mark Arrived</button>
+                      <button onClick={() => handleUpdateAppointmentStatus(a.id, 'cancelled')} className="flex-1 text-xs py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors">Cancel</button>
+                    </div>
+                  )}
+                  {a.status === 'arrived' && (
+                    <button onClick={() => handleUpdateAppointmentStatus(a.id, 'completed')} className="w-full text-xs py-1 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors">Complete</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {showWalkIn && <WalkInModal services={branchServices.map(s => s.name)} onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
+
+      {/* Transfer modal */}
+      {showTransfer && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-40" onClick={() => setShowTransfer(false)}>
+          <div className="bg-white w-full max-w-sm mx-auto rounded-t-2xl p-5" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-semibold text-gray-700 mb-3">Transfer Ticket #{status?.currentTicketNumber} to:</p>
+            {branchServices.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">No services configured</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {branchServices
+                  .filter(s => s.name !== status?.currentServiceType)
+                  .map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => handleTransfer(s.name)}
+                      className="py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-700 font-medium hover:border-teal-brand hover:text-teal-brand transition-colors text-sm"
+                    >
+                      {s.name}
+                    </button>
+                  ))}
+              </div>
+            )}
+            <button onClick={() => setShowTransfer(false)} className="w-full mt-3 py-2 text-gray-400 text-sm hover:text-gray-600">Cancel</button>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium z-50 ${
