@@ -182,6 +182,21 @@ using (var scope = app.Services.CreateScope())
         CREATE INDEX IF NOT EXISTS "IX_Appointments_BranchId_ScheduledAt"
             ON "Appointments"("BranchId", "ScheduledAt");
         """);
+
+    // Scope ticket-number uniqueness by queue date. Ticket numbers reset daily
+    // (the Redis counter is keyed by date), so the global unique index on
+    // (BranchId, TicketNumber) collided with prior days' tickets. Add a
+    // QueueDate column and make the unique index (BranchId, QueueDate, TicketNumber).
+    await ctx.Database.ExecuteSqlRawAsync("""
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "QueueDate" DATE;
+        UPDATE "QueueTickets" SET "QueueDate" = "JoinedAt"::date WHERE "QueueDate" IS NULL;
+        ALTER TABLE "QueueTickets" ALTER COLUMN "QueueDate" SET DEFAULT CURRENT_DATE;
+        ALTER TABLE "QueueTickets" ALTER COLUMN "QueueDate" SET NOT NULL;
+
+        DROP INDEX IF EXISTS "IX_QueueTickets_BranchId_TicketNumber";
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_QueueTickets_BranchId_QueueDate_TicketNumber"
+            ON "QueueTickets"("BranchId", "QueueDate", "TicketNumber");
+        """);
 }
 
 // Middleware pipeline

@@ -47,6 +47,7 @@ public class QueueService(
         {
             BranchId = req.BranchId,
             TicketNumber = nextNumber,
+            QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
             ServiceType = req.ServiceType,
             CustomerName = req.CustomerName,
             Phone = req.Phone,
@@ -177,6 +178,7 @@ public class QueueService(
         ticket.ServiceType = newServiceType;
         // Move to end of queue so fair ordering is maintained
         ticket.TicketNumber = await NextTicketNumberAsync(ticket.BranchId);
+        ticket.QueueDate = DateOnly.FromDateTime(DateTime.UtcNow);
         ticket.Status = TicketStatus.Waiting;
         await db.SaveChangesAsync();
 
@@ -217,6 +219,7 @@ public class QueueService(
         else
         {
             ticket.TicketNumber = await NextTicketNumberAsync(ticket.BranchId);
+            ticket.QueueDate = DateOnly.FromDateTime(DateTime.UtcNow);
             ticket.Status = TicketStatus.Waiting;
         }
 
@@ -428,9 +431,9 @@ public class QueueService(
 
         if (!await cache.KeyExistsAsync(key))
         {
-            var todayStart = DateTime.UtcNow.Date;
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var todayMax = await db.QueueTickets
-                .Where(t => t.BranchId == branchId && t.JoinedAt >= todayStart)
+                .Where(t => t.BranchId == branchId && t.QueueDate == today)
                 .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
             await cache.StringSetAsync(key, todayMax, when: When.NotExists);
             await cache.KeyExpireAsync(key, TimeSpan.FromDays(2));

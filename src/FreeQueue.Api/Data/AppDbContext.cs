@@ -35,7 +35,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.Status).HasMaxLength(20).HasDefaultValue("waiting");
             e.Property(t => t.Priority).HasDefaultValue(false);
             e.Property(t => t.CounterId).HasMaxLength(50);
-            e.HasIndex(t => new { t.BranchId, t.TicketNumber }).IsUnique();
+            e.HasIndex(t => new { t.BranchId, t.QueueDate, t.TicketNumber }).IsUnique();
             e.HasIndex(t => new { t.BranchId, t.Status });
         });
 

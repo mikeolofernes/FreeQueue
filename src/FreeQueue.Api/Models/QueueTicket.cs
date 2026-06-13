@@ -5,6 +5,7 @@ public class QueueTicket
     public int Id { get; set; }
     public string BranchId { get; set; } = default!;
     public int TicketNumber { get; set; }
+    public DateOnly QueueDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
     public string ServiceType { get; set; } = default!;
     public string? CustomerName { get; set; }
     public string? Phone { get; set; }
