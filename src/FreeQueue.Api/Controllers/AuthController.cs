@@ -26,11 +26,11 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
         if (account == null || !BCrypt.Net.BCrypt.Verify(req.Password, account.PasswordHash))
             return Unauthorized("Invalid username or password.");
 
-        // Auto-apply default kiosk PIN to the branch on login
+        // Auto-apply default kiosk PIN hash to the branch on login
         if (account.DefaultKioskPin != null)
         {
             var branch = await db.Branches.FindAsync(account.BranchId);
-            if (branch != null && branch.KioskPin != account.DefaultKioskPin)
+            if (branch != null)
             {
                 branch.KioskPin = account.DefaultKioskPin;
                 await db.SaveChangesAsync();
@@ -38,7 +38,7 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
         }
 
         var token = BuildToken(account.BranchId, account.Username, account.Role);
-        return new LoginResponse(token, account.BranchId, account.Username, account.Role, account.DefaultKioskPin);
+        return new LoginResponse(token, account.BranchId, account.Username, account.Role, account.DefaultKioskPin != null);
     }
 
     [Authorize]
@@ -48,7 +48,14 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
         var username = User.FindFirstValue(ClaimTypes.Name);
         var account = await db.StaffAccounts.FirstOrDefaultAsync(a => a.Username == username);
         if (account == null) return NotFound();
-        account.DefaultKioskPin = string.IsNullOrWhiteSpace(req.Pin) ? null : req.Pin.Trim();
+
+        var hashedPin = string.IsNullOrWhiteSpace(req.Pin) ? null : BCrypt.Net.BCrypt.HashPassword(req.Pin.Trim());
+        account.DefaultKioskPin = hashedPin;
+
+        // Mirror to branch immediately so it takes effect without re-login
+        var branch = await db.Branches.FindAsync(account.BranchId);
+        if (branch != null) branch.KioskPin = hashedPin;
+
         await db.SaveChangesAsync();
         return NoContent();
     }

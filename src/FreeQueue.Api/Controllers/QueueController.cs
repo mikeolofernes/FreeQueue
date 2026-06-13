@@ -46,8 +46,12 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
     }
 
     [HttpPost("ticket/{ticketId:int}/rate")]
-    public async Task<IActionResult> RateTicket(int ticketId, [FromBody] RateTicketRequest req)
+    public async Task<IActionResult> RateTicket(int ticketId, [FromBody] RateTicketRequest req, [FromQuery] string? vt)
     {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null) return NotFound();
+        if (ticket.ViewToken != null && ticket.ViewToken != vt)
+            return Unauthorized("Invalid view token.");
         await queue.RateTicketAsync(ticketId, req.Rating);
         return Ok();
     }
@@ -75,9 +79,13 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
     }
 
+    [Authorize]
     [HttpPost("ticket/{ticketId:int}/skip")]
     public async Task<IActionResult> Skip(int ticketId)
     {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null) return NotFound();
+        if (CheckBranch(ticket.BranchId) is { } denied) return denied;
         try { await queue.SkipAsync(ticketId); return Ok(); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
@@ -142,6 +150,9 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
     [HttpPost("ticket/{ticketId:int}/no-show")]
     public async Task<IActionResult> NoShow(int ticketId, [FromQuery] string? counterId = null)
     {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null) return NotFound();
+        if (CheckBranch(ticket.BranchId) is { } denied) return denied;
         try { await queue.NoShowAsync(ticketId, counterId); return Ok(); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
     }
@@ -150,6 +161,9 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
     [HttpPut("ticket/{ticketId:int}/transfer")]
     public async Task<ActionResult<TicketResponse>> Transfer(int ticketId, [FromBody] TransferTicketRequest req)
     {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null) return NotFound();
+        if (CheckBranch(ticket.BranchId) is { } denied) return denied;
         try { return Ok(await queue.TransferAsync(ticketId, req.NewServiceType)); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }

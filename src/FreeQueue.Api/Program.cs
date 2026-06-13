@@ -50,6 +50,10 @@ builder.Services.AddRateLimiter(options =>
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? throw new InvalidOperationException("Jwt:Secret is required in configuration.");
 
+if (!builder.Environment.IsDevelopment() &&
+    jwtSecret == "change-this-to-a-long-random-secret-before-deploying-32chars+")
+    throw new InvalidOperationException("Default JWT secret must be changed before deploying to production.");
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -102,8 +106,10 @@ builder.Services.AddCors(options =>
         var p = policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
         if (allowedOrigins.Length > 0)
             p.WithOrigins(allowedOrigins);
-        else
+        else if (builder.Environment.IsDevelopment())
             p.SetIsOriginAllowed(_ => true);
+        else
+            throw new InvalidOperationException("Cors:AllowedOrigins must be configured in production. Wildcard CORS is not permitted.");
     });
 });
 

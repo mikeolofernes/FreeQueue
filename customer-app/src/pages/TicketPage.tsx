@@ -96,7 +96,7 @@ export function TicketPage() {
   if (stage === 'served') {
     clearTicket()
     if (postServe === 'csat') {
-      return <CsatScreen ticketId={id} onDone={() => setPostServe('thanks')} />
+      return <CsatScreen ticketId={id} vt={vt} onDone={() => setPostServe('thanks')} />
     }
     if (postServe === 'thanks') {
       return <ThankYouScreen />
@@ -244,7 +244,7 @@ function DoneScreen({ ticket, onDone }: { ticket: TicketResponse; onDone: () => 
 
 const CSAT_AUTO_SECS = 10
 
-function CsatScreen({ ticketId, onDone }: { ticketId: number; onDone: () => void }) {
+function CsatScreen({ ticketId, vt, onDone }: { ticketId: number; vt?: string; onDone: () => void }) {
   const [countdown, setCountdown] = useState(CSAT_AUTO_SECS)
 
   useEffect(() => {
@@ -258,7 +258,7 @@ function CsatScreen({ ticketId, onDone }: { ticketId: number; onDone: () => void
   }, [onDone])
 
   function handleRate(rating: number) {
-    api.rateTicket(ticketId, rating).catch(() => {})
+    api.rateTicket(ticketId, rating, vt).catch(() => {})
     onDone()
   }
 

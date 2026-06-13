@@ -81,8 +81,8 @@ export const api = {
   leave: (ticketId: number, vt?: string) =>
     request<void>(`/api/queue/ticket/${ticketId}/leave${vt ? `?vt=${encodeURIComponent(vt)}` : ''}`, { method: 'POST' }),
 
-  rateTicket: (ticketId: number, rating: number) =>
-    request<void>(`/api/queue/ticket/${ticketId}/rate`, {
+  rateTicket: (ticketId: number, rating: number, vt?: string) =>
+    request<void>(`/api/queue/ticket/${ticketId}/rate${vt ? `?vt=${encodeURIComponent(vt)}` : ''}`, {
       method: 'POST',
       body: JSON.stringify({ rating }),
     }),
@@ -114,7 +114,7 @@ export const api = {
 
   // Staff (authenticated)
   login: (username: string, password: string) =>
-    request<{ token: string; branchId: string; username: string; role: string; defaultKioskPin?: string | null }>('/api/auth/login', {
+    request<{ token: string; branchId: string; username: string; role: string; hasDefaultPin: boolean }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     }),

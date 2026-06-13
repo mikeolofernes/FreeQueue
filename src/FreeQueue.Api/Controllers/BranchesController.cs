@@ -4,6 +4,7 @@ using FreeQueue.Api.Models;
 using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace FreeQueue.Api.Controllers;
@@ -53,6 +54,7 @@ public class BranchesController(AppDbContext db, QueueService queue) : Controlle
     [HttpPut("{id}")]
     public async Task<ActionResult<BranchResponse>> Update(string id, CreateBranchRequest req)
     {
+        if (CheckBranch(id) is { } denied) return denied;
         var branch = await db.Branches.FindAsync(id);
         if (branch == null) return NotFound();
 
@@ -84,14 +86,15 @@ public class BranchesController(AppDbContext db, QueueService queue) : Controlle
     }
 
     // Kiosk PIN
+    [EnableRateLimiting("kiosk")]
     [HttpPost("{id}/kiosk-verify")]
     public async Task<IActionResult> VerifyKioskPin(string id, [FromBody] VerifyKioskPinRequest req)
     {
         var branch = await db.Branches.FindAsync(id);
         if (branch == null) return NotFound();
-        if (branch.KioskPin == null || branch.KioskPin == req.Pin.Trim())
-            return Ok(new { valid = true });
-        return Unauthorized(new { valid = false });
+        if (branch.KioskPin == null) return Ok(new { valid = true });
+        var isValid = BCrypt.Net.BCrypt.Verify(req.Pin.Trim(), branch.KioskPin);
+        return isValid ? Ok(new { valid = true }) : Unauthorized(new { valid = false });
     }
 
     [Authorize]
@@ -102,7 +105,7 @@ public class BranchesController(AppDbContext db, QueueService queue) : Controlle
         var branch = await db.Branches.FindAsync(id);
         if (branch == null) return NotFound();
 
-        branch.KioskPin = string.IsNullOrWhiteSpace(req.Pin) ? null : req.Pin.Trim();
+        branch.KioskPin = string.IsNullOrWhiteSpace(req.Pin) ? null : BCrypt.Net.BCrypt.HashPassword(req.Pin.Trim());
         await db.SaveChangesAsync();
         return NoContent();
     }

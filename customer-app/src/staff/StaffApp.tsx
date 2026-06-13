@@ -9,7 +9,6 @@ import type { QueueStatus, BranchService, AnalyticsData, Appointment } from '../
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
 const COUNTER_ID_KEY = 'fq_counter_id'
-const DEFAULT_PIN_KEY = 'fq_default_pin'
 
 type Panel = 'none' | 'pin' | 'services' | 'analytics' | 'appointments'
 
@@ -29,7 +28,7 @@ export default function StaffApp() {
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
-  const [defaultPin, setDefaultPin] = useState(() => localStorage.getItem(DEFAULT_PIN_KEY) ?? '')
+  const [hasDefaultPin, setHasDefaultPin] = useState(false)
   const [defaultPinInput, setDefaultPinInput] = useState('')
   const [counterId, setCounterId] = useState(() => localStorage.getItem(COUNTER_ID_KEY) ?? '')
   const [editingCounterId, setEditingCounterId] = useState(false)
@@ -73,13 +72,11 @@ export default function StaffApp() {
     onDisconnected: () => setConnected(false),
   })
 
-  function handleLogin(id: string, defaultKioskPin?: string | null) {
+  function handleLogin(id: string, hasPin?: boolean) {
     localStorage.setItem(BRANCH_KEY, id)
     setBranchId(id)
     setIsLoggedIn(true)
-    const pin = defaultKioskPin ?? ''
-    localStorage.setItem(DEFAULT_PIN_KEY, pin)
-    setDefaultPin(pin)
+    setHasDefaultPin(!!hasPin)
     api.getBranch(id).then(b => {
       localStorage.setItem(BRANCH_NAME_KEY, b.name)
       setBranchName(b.name)
@@ -90,11 +87,10 @@ export default function StaffApp() {
     auth.clearToken()
     localStorage.removeItem(BRANCH_KEY)
     localStorage.removeItem(BRANCH_NAME_KEY)
-    localStorage.removeItem(DEFAULT_PIN_KEY)
     setBranchId('')
     setBranchName('')
     setBranchServices([])
-    setDefaultPin('')
+    setHasDefaultPin(false)
     setIsLoggedIn(false)
     setStatus(null)
     setActivePanel('none')
@@ -192,10 +188,9 @@ export default function StaffApp() {
   async function handleSetDefaultPin(e: React.FormEvent) {
     e.preventDefault()
     try {
-      await api.setDefaultPin(defaultPinInput.trim() || null)
       const val = defaultPinInput.trim()
-      localStorage.setItem(DEFAULT_PIN_KEY, val)
-      setDefaultPin(val)
+      await api.setDefaultPin(val || null)
+      setHasDefaultPin(!!val)
       setDefaultPinInput('')
       showToast(val ? '🔒 Default PIN saved' : '🔓 Default PIN cleared')
     } catch (err) {
@@ -462,7 +457,7 @@ export default function StaffApp() {
             <p className="text-sm font-semibold text-gray-700 mb-1">Default PIN</p>
             <p className="text-xs text-gray-400 mb-3">
               Saved to your account — automatically applied when you log in.
-              {defaultPin ? <span className="text-teal-brand ml-1">Current: {defaultPin}</span> : null}
+              {hasDefaultPin ? <span className="text-teal-brand ml-1">✓ A default PIN is set</span> : null}
             </p>
             <form onSubmit={handleSetDefaultPin} className="flex gap-2">
               <input
