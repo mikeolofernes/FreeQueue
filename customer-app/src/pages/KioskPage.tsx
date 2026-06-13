@@ -13,7 +13,7 @@ const FORM_IDLE_SECS = 60
 const FORM_WARN_SECS = 10
 const STATUS_POLL_MS = 30_000
 
-type Screen = 'pin' | 'idle' | 'form' | 'ticket' | 'scanned' | 'csat' | 'closed'
+type Screen = 'pin' | 'idle' | 'form' | 'ticket' | 'scanned' | 'csat' | 'closed' | 'served'
 
 export function KioskPage() {
   const [params] = useSearchParams()
@@ -129,6 +129,18 @@ export function KioskPage() {
     const t = setTimeout(reset, 8000)
     return () => clearTimeout(t)
   }, [screen])
+
+  // Poll ticket status while showing ticket screen — transition to 'served' when done
+  useEffect(() => {
+    if (screen !== 'ticket' || !ticket) return
+    const poll = setInterval(async () => {
+      try {
+        const t = await api.getTicket(ticket.id)
+        if (t.status === 'served') setScreen('served')
+      } catch { /* ignore */ }
+    }, 4000)
+    return () => clearInterval(poll)
+  }, [screen, ticket])
 
   // Form inactivity
   useEffect(() => {
@@ -283,6 +295,11 @@ export function KioskPage() {
     )
   }
 
+  // ── Served ────────────────────────────────────────────────────────────────
+  if (screen === 'served') {
+    return <KioskServedScreen ticketNumber={ticket?.ticketNumber ?? 0} onReset={reset} />
+  }
+
   // ── CSAT ──────────────────────────────────────────────────────────────────
   if (screen === 'csat') {
     return (
@@ -430,6 +447,40 @@ export function KioskPage() {
           </button>
         </div>
       </form>
+    </div>
+  )
+}
+
+const SERVED_RESET_SECS = 8
+
+function KioskServedScreen({ ticketNumber, onReset }: { ticketNumber: number; onReset: () => void }) {
+  const [countdown, setCountdown] = useState(SERVED_RESET_SECS)
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(t); onReset(); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [onReset])
+
+  return (
+    <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-center text-white gap-6">
+      <div className="text-[100px] leading-none">🎉</div>
+      <div>
+        <p className="text-5xl font-black">#{ticketNumber}</p>
+        <p className="text-3xl font-bold mt-2">You've been served!</p>
+        <p className="text-teal-light text-xl mt-2">Thank you for your patience.</p>
+      </div>
+      <button
+        onClick={onReset}
+        className="mt-4 bg-white text-teal-brand font-bold px-12 py-5 rounded-2xl shadow-lg text-2xl"
+      >
+        Done
+      </button>
+      <p className="text-teal-light text-lg">Next customer in {countdown}s…</p>
     </div>
   )
 }
