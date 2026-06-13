@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { api, auth } from '../api'
 
 interface Props {
-  onLogin: (branchId: string, branchName: string) => void
+  onLogin: (branchId: string) => void
 }
 
 export function LoginScreen({ onLogin }: Props) {
@@ -20,11 +20,11 @@ export function LoginScreen({ onLogin }: Props) {
     setLoading(true)
     setError('')
     try {
-      const res = await api.login(branchId.trim(), username.trim(), password)
+      const res = await api.login(username.trim(), password)
       auth.setToken(res.token)
-      onLogin(res.branchId, branchName.trim() || res.branchId)
+      onLogin(res.branchId)
     } catch {
-      setError('Wrong branch ID, username, or password.')
+      setError('Wrong username or password.')
     } finally {
       setLoading(false)
     }
@@ -72,28 +72,29 @@ export function LoginScreen({ onLogin }: Props) {
         </div>
 
         <form onSubmit={tab === 'login' ? handleLogin : handleSetup} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Branch ID</label>
-            <input
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-brand"
-              placeholder="e.g. bacoor-clinic-01"
-              value={branchId}
-              onChange={e => setBranchId(e.target.value)}
-              required
-              autoFocus
-            />
-          </div>
-
           {tab === 'setup' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
-              <input
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-brand"
-                placeholder="e.g. Bacoor Clinic"
-                value={branchName}
-                onChange={e => setBranchName(e.target.value)}
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Branch ID</label>
+                <input
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-brand"
+                  placeholder="e.g. bacoor-clinic-01"
+                  value={branchId}
+                  onChange={e => setBranchId(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
+                <input
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-brand"
+                  placeholder="e.g. Bacoor Clinic"
+                  value={branchName}
+                  onChange={e => setBranchName(e.target.value)}
+                />
+              </div>
+            </>
           )}
 
           <div>
@@ -104,6 +105,7 @@ export function LoginScreen({ onLogin }: Props) {
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
+              autoFocus={tab === 'login'}
             />
           </div>
 
@@ -124,7 +126,7 @@ export function LoginScreen({ onLogin }: Props) {
 
           <button
             type="submit"
-            disabled={loading || !branchId.trim() || !password}
+            disabled={loading || (tab === 'setup' && !branchId.trim()) || !username.trim() || !password}
             className="w-full py-3 bg-teal-brand hover:bg-teal-dark disabled:opacity-40 text-white font-semibold rounded-xl transition-colors"
           >
             {loading ? '…' : tab === 'login' ? 'Login' : 'Create Account'}

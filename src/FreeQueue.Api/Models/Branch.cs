@@ -16,4 +16,5 @@ public class Branch
 
     public ICollection<QueueTicket> Tickets { get; set; } = [];
     public ICollection<QueueTransaction> Transactions { get; set; } = [];
+    public ICollection<BranchService> Services { get; set; } = [];
 }

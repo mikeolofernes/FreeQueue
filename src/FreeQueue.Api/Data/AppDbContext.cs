@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<QueueTicket> QueueTickets => Set<QueueTicket>();
     public DbSet<QueueTransaction> QueueTransactions => Set<QueueTransaction>();
     public DbSet<StaffAccount> StaffAccounts => Set<StaffAccount>();
+    public DbSet<BranchService> BranchServices => Set<BranchService>();
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
@@ -46,8 +47,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(a => a.Id);
             e.Property(a => a.Username).HasMaxLength(100).IsRequired();
             e.Property(a => a.PasswordHash).IsRequired();
-            e.HasIndex(a => new { a.BranchId, a.Username }).IsUnique();
+            e.HasIndex(a => a.Username).IsUnique();
             e.HasOne(a => a.Branch).WithMany().HasForeignKey(a => a.BranchId);
+        });
+
+        mb.Entity<BranchService>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Name).HasMaxLength(200).IsRequired();
+            e.HasOne(s => s.Branch).WithMany(b => b.Services).HasForeignKey(s => s.BranchId);
+            e.HasIndex(s => s.BranchId);
         });
     }
 }

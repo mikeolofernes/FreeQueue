@@ -28,3 +28,7 @@ public record BranchResponse(
 public record SetKioskPinRequest(string? Pin);
 
 public record VerifyKioskPinRequest(string Pin);
+
+public record BranchServiceResponse(int Id, string Name, int SortOrder);
+
+public record CreateBranchServiceRequest(string Name);

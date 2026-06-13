@@ -43,3 +43,9 @@ export interface UndoResponse {
   success: boolean
   message: string
 }
+
+export interface BranchService {
+  id: number
+  name: string
+  sortOrder: number
+}

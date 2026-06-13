@@ -138,6 +138,24 @@ using (var scope = app.Services.CreateScope())
         ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "ViewedAt" TIMESTAMP NULL;
         ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "ViewToken" VARCHAR(32) NULL;
         """);
+    await ctx.Database.ExecuteSqlRawAsync("""
+        -- Migrate StaffAccounts to globally-unique usernames
+        ALTER TABLE "StaffAccounts" DROP CONSTRAINT IF EXISTS "uq_StaffAccounts_BranchId_Username";
+        DROP INDEX IF EXISTS "IX_StaffAccounts_BranchId_Username";
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_StaffAccounts_Username"
+            ON "StaffAccounts"("Username");
+
+        -- Branch-specific services table
+        CREATE TABLE IF NOT EXISTS "BranchServices" (
+            "Id"        SERIAL PRIMARY KEY,
+            "BranchId"  VARCHAR(100) NOT NULL,
+            "Name"      VARCHAR(200) NOT NULL,
+            "SortOrder" INTEGER      NOT NULL DEFAULT 0,
+            CONSTRAINT "FK_BranchServices_Branches_BranchId"
+                FOREIGN KEY ("BranchId") REFERENCES "Branches"("Id") ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS "IX_BranchServices_BranchId" ON "BranchServices"("BranchId");
+        """);
 }
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────

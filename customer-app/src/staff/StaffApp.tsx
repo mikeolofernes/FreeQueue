@@ -4,25 +4,25 @@ import { useQueueHub } from './useQueueHub'
 import { LoginScreen } from './LoginScreen'
 import { WalkInModal } from './WalkInModal'
 import { ElapsedTimer } from './ElapsedTimer'
-import { getServiceTypes } from './serviceTypes'
-import type { QueueStatus } from '../types'
+import type { QueueStatus, BranchService } from '../types'
 
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
-const BRANCH_CATEGORY_KEY = 'fq_branch_category'
 
 export default function StaffApp() {
   const [branchId, setBranchId] = useState(() => localStorage.getItem(BRANCH_KEY) ?? '')
   const [branchName, setBranchName] = useState(() => localStorage.getItem(BRANCH_NAME_KEY) ?? '')
-  const [branchServices, setBranchServices] = useState(() =>
-    getServiceTypes(localStorage.getItem(BRANCH_CATEGORY_KEY)))
+  const [branchServices, setBranchServices] = useState<BranchService[]>([])
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!auth.getToken())
   const [status, setStatus] = useState<QueueStatus | null>(null)
   const [connected, setConnected] = useState(false)
   const [servingStartedAt, setServingStartedAt] = useState<Date | null>(null)
   const [showWalkIn, setShowWalkIn] = useState(false)
   const [showPinSettings, setShowPinSettings] = useState(false)
+  const [showServices, setShowServices] = useState(false)
   const [pinInput, setPinInput] = useState('')
+  const [newService, setNewService] = useState('')
+  const [editingService, setEditingService] = useState<{ id: number; name: string } | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const prevTicket = useRef<number | null>(null)
@@ -37,6 +37,10 @@ export default function StaffApp() {
     try { setStatus(await api.getStatus(branchId)) } catch { /* keep stale */ }
   }, [branchId])
 
+  const loadServices = useCallback(async (id: string) => {
+    try { setBranchServices(await api.getServices(id)) } catch { /* keep stale */ }
+  }, [])
+
   useEffect(() => {
     if (status?.currentTicketNumber !== prevTicket.current) {
       prevTicket.current = status?.currentTicketNumber ?? null
@@ -44,7 +48,12 @@ export default function StaffApp() {
     }
   }, [status?.currentTicketNumber])
 
-  useEffect(() => { if (branchId && isLoggedIn) refreshStatus() }, [branchId, isLoggedIn, refreshStatus])
+  useEffect(() => {
+    if (branchId && isLoggedIn) {
+      refreshStatus()
+      loadServices(branchId)
+    }
+  }, [branchId, isLoggedIn, refreshStatus, loadServices])
 
   useQueueHub({
     branchId,
@@ -53,15 +62,13 @@ export default function StaffApp() {
     onDisconnected: () => setConnected(false),
   })
 
-  function handleLogin(id: string, name: string) {
+  function handleLogin(id: string) {
     localStorage.setItem(BRANCH_KEY, id)
-    localStorage.setItem(BRANCH_NAME_KEY, name)
     setBranchId(id)
-    setBranchName(name)
     setIsLoggedIn(true)
     api.getBranch(id).then(b => {
-      if (b.category) localStorage.setItem(BRANCH_CATEGORY_KEY, b.category)
-      setBranchServices(getServiceTypes(b.category))
+      localStorage.setItem(BRANCH_NAME_KEY, b.name)
+      setBranchName(b.name)
     }).catch(() => {})
   }
 
@@ -69,12 +76,13 @@ export default function StaffApp() {
     auth.clearToken()
     localStorage.removeItem(BRANCH_KEY)
     localStorage.removeItem(BRANCH_NAME_KEY)
-    localStorage.removeItem(BRANCH_CATEGORY_KEY)
     setBranchId('')
     setBranchName('')
-    setBranchServices(getServiceTypes())
+    setBranchServices([])
     setIsLoggedIn(false)
     setStatus(null)
+    setShowServices(false)
+    setShowPinSettings(false)
   }
 
   async function handleAdvance() {
@@ -128,6 +136,38 @@ export default function StaffApp() {
       setShowPinSettings(false)
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to set PIN', 'err')
+    }
+  }
+
+  async function handleAddService(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newService.trim()) return
+    try {
+      const added = await api.addService(branchId, newService.trim())
+      setBranchServices(prev => [...prev, added])
+      setNewService('')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to add service', 'err')
+    }
+  }
+
+  async function handleUpdateService(id: number, name: string) {
+    if (!name.trim()) return
+    try {
+      const updated = await api.updateService(branchId, id, name.trim())
+      setBranchServices(prev => prev.map(s => s.id === id ? updated : s))
+      setEditingService(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update service', 'err')
+    }
+  }
+
+  async function handleDeleteService(id: number) {
+    try {
+      await api.deleteService(branchId, id)
+      setBranchServices(prev => prev.filter(s => s.id !== id))
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete service', 'err')
     }
   }
 
@@ -206,11 +246,18 @@ export default function StaffApp() {
           ↩ Undo
         </button>
         <button
-          onClick={() => setShowPinSettings(p => !p)}
-          className="py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition-colors"
+          onClick={() => { setShowPinSettings(p => !p); setShowServices(false) }}
+          className={`py-3 px-4 rounded-xl border-2 font-semibold transition-colors ${showPinSettings ? 'border-teal-brand bg-teal-brand text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
           title="Kiosk PIN"
         >
           🔒
+        </button>
+        <button
+          onClick={() => { setShowServices(p => !p); setShowPinSettings(false); setEditingService(null) }}
+          className={`py-3 px-4 rounded-xl border-2 font-semibold transition-colors ${showServices ? 'border-teal-brand bg-teal-brand text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          title="Manage Services"
+        >
+          ⚙
         </button>
       </div>
 
@@ -237,7 +284,78 @@ export default function StaffApp() {
         </div>
       )}
 
-      {showWalkIn && <WalkInModal services={branchServices} onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
+      {showServices && (
+        <div className="bg-white border-t border-gray-200 px-5 py-4">
+          <p className="text-sm font-semibold text-gray-700 mb-3">Services Offered</p>
+          <div className="space-y-2 mb-3 max-h-52 overflow-y-auto">
+            {branchServices.length === 0 && (
+              <p className="text-xs text-gray-400 italic">No services yet. Add one below.</p>
+            )}
+            {branchServices.map(s => (
+              <div key={s.id} className="flex items-center gap-2">
+                {editingService?.id === s.id ? (
+                  <>
+                    <input
+                      className="flex-1 border-2 border-teal-brand rounded-lg px-3 py-1.5 text-sm outline-none"
+                      value={editingService.name}
+                      onChange={e => setEditingService({ id: s.id, name: e.target.value })}
+                      onKeyDown={e => { if (e.key === 'Enter') handleUpdateService(s.id, editingService.name) }}
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => handleUpdateService(s.id, editingService.name)}
+                      className="px-3 py-1.5 bg-teal-brand text-white text-xs rounded-lg hover:bg-teal-dark transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingService(null)}
+                      className="px-2 py-1.5 text-gray-400 text-xs rounded-lg hover:text-gray-600 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-gray-700 py-1">{s.name}</span>
+                    <button
+                      onClick={() => setEditingService({ id: s.id, name: s.name })}
+                      className="text-gray-400 hover:text-teal-brand p-1 text-sm transition-colors"
+                      title="Edit"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      onClick={() => handleDeleteService(s.id)}
+                      className="text-gray-400 hover:text-red-500 p-1 text-sm transition-colors"
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+          <form onSubmit={handleAddService} className="flex gap-2">
+            <input
+              className="flex-1 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-3 py-2 text-sm outline-none transition-colors"
+              placeholder="New service name"
+              value={newService}
+              onChange={e => setNewService(e.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={!newService.trim()}
+              className="px-4 py-2 rounded-xl bg-teal-brand text-white text-sm font-semibold disabled:opacity-40 hover:bg-teal-dark transition-colors"
+            >
+              Add
+            </button>
+          </form>
+        </div>
+      )}
+
+      {showWalkIn && <WalkInModal services={branchServices.map(s => s.name)} onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
 
       {toast && (
         <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium z-50 ${

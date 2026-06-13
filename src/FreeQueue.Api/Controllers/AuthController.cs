@@ -21,10 +21,10 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest req)
     {
         var account = await db.StaffAccounts
-            .FirstOrDefaultAsync(a => a.BranchId == req.BranchId && a.Username == req.Username);
+            .FirstOrDefaultAsync(a => a.Username == req.Username);
 
         if (account == null || !BCrypt.Net.BCrypt.Verify(req.Password, account.PasswordHash))
-            return Unauthorized("Invalid branch, username, or password.");
+            return Unauthorized("Invalid username or password.");
 
         var token = BuildToken(account.BranchId, account.Username);
         return new LoginResponse(token, account.BranchId, account.Username);

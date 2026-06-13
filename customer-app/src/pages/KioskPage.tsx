@@ -3,12 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import * as signalR from '@microsoft/signalr'
 import { api } from '../api'
-import type { TicketResponse, QueueStatus } from '../types'
+import type { TicketResponse, QueueStatus, BranchService } from '../types'
 
 function kioskPinKey(branchId: string) { return `fq_kiosk_pin_${branchId}` }
 
 const HUB_URL = `${window.location.origin}/hubs/queue`
-const SERVICE_TYPES = ['Consultation', 'Cashier', 'New Account', 'Deposit', 'Withdrawal']
 const RESET_SECS = 30
 const FORM_IDLE_SECS = 60
 const FORM_WARN_SECS = 10
@@ -26,7 +25,8 @@ export function KioskPage() {
   const [pinError, setPinError] = useState('')
   const [hasKioskPin, setHasKioskPin] = useState(!!storedPin)
   const [kioskPin, setKioskPin] = useState<string | null>(storedPin)
-  const [serviceType, setServiceType] = useState(SERVICE_TYPES[0])
+  const [services, setServices] = useState<BranchService[]>([])
+  const [serviceType, setServiceType] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
@@ -38,9 +38,16 @@ export function KioskPage() {
   const connRef = useRef<signalR.HubConnection | null>(null)
   const formTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Check if branch requires a kiosk PIN (only when we don't already have one stored)
+  // Load branch services and check kiosk PIN requirement
   useEffect(() => {
-    if (!branchId || storedPin) return
+    if (!branchId) return
+    api.getServices(branchId)
+      .then(s => {
+        setServices(s)
+        if (s.length > 0) setServiceType(s[0].name)
+      })
+      .catch(() => {})
+    if (storedPin) return
     api.getBranch(branchId)
       .then(b => {
         setHasKioskPin(b.hasKioskPin)
@@ -52,7 +59,6 @@ export function KioskPage() {
   function reset() {
     setTicket(null)
     setScreen('idle')
-    setServiceType(SERVICE_TYPES[0])
     setName('')
     setPhone('')
     setError('')
@@ -348,17 +354,17 @@ export function KioskPage() {
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">What do you need?</label>
           <div className="grid grid-cols-2 gap-3">
-            {SERVICE_TYPES.map(s => (
+            {services.map(s => (
               <button
-                key={s} type="button"
-                onClick={() => { setServiceType(s); resetFormTimer() }}
+                key={s.id} type="button"
+                onClick={() => { setServiceType(s.name); resetFormTimer() }}
                 className={`py-4 px-4 rounded-xl text-base font-semibold border-2 transition-colors ${
-                  serviceType === s
+                  serviceType === s.name
                     ? 'bg-teal-brand text-white border-teal-brand'
                     : 'bg-white text-gray-700 border-gray-200 hover:border-teal-brand'
                 }`}
               >
-                {s}
+                {s.name}
               </button>
             ))}
           </div>

@@ -1,4 +1,4 @@
-import type { BranchResponse, TicketResponse, QueueStatus, UndoResponse } from './types'
+import type { BranchResponse, TicketResponse, QueueStatus, UndoResponse, BranchService } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'fq_staff_token'
@@ -65,11 +65,14 @@ export const api = {
   lookupCustomer: (phone: string) =>
     request<{ name: string | null }>(`/api/queue/customer/lookup?phone=${encodeURIComponent(phone)}`),
 
+  getServices: (branchId: string) =>
+    request<BranchService[]>(`/api/branches/${encodeURIComponent(branchId)}/services`),
+
   // Staff (authenticated)
-  login: (branchId: string, username: string, password: string) =>
+  login: (username: string, password: string) =>
     request<{ token: string; branchId: string; username: string }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ branchId, username, password }),
+      body: JSON.stringify({ username, password }),
     }),
 
   getStatus: (branchId: string) =>
@@ -116,4 +119,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ pin }),
     }),
+
+  addService: (branchId: string, name: string) =>
+    request<BranchService>(`/api/branches/${encodeURIComponent(branchId)}/services`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }, true),
+
+  updateService: (branchId: string, serviceId: number, name: string) =>
+    request<BranchService>(`/api/branches/${encodeURIComponent(branchId)}/services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    }, true),
+
+  deleteService: (branchId: string, serviceId: number) =>
+    request<void>(`/api/branches/${encodeURIComponent(branchId)}/services/${serviceId}`, {
+      method: 'DELETE',
+    }, true),
 }

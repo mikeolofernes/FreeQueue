@@ -90,6 +90,54 @@ public class BranchesController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
+    // ── Services ──────────────────────────────────────────────────────────────
+
+    [HttpGet("{id}/services")]
+    public async Task<ActionResult<IEnumerable<BranchServiceResponse>>> GetServices(string id)
+    {
+        if (!await db.Branches.AnyAsync(b => b.Id == id)) return NotFound();
+        var services = await db.BranchServices
+            .Where(s => s.BranchId == id)
+            .OrderBy(s => s.SortOrder).ThenBy(s => s.Id)
+            .Select(s => new BranchServiceResponse(s.Id, s.Name, s.SortOrder))
+            .ToListAsync();
+        return Ok(services);
+    }
+
+    [Authorize]
+    [HttpPost("{id}/services")]
+    public async Task<ActionResult<BranchServiceResponse>> AddService(string id, [FromBody] CreateBranchServiceRequest req)
+    {
+        if (!await db.Branches.AnyAsync(b => b.Id == id)) return NotFound();
+        var maxOrder = await db.BranchServices.Where(s => s.BranchId == id).MaxAsync(s => (int?)s.SortOrder) ?? -1;
+        var svc = new Models.BranchService { BranchId = id, Name = req.Name.Trim(), SortOrder = maxOrder + 1 };
+        db.BranchServices.Add(svc);
+        await db.SaveChangesAsync();
+        return Ok(new BranchServiceResponse(svc.Id, svc.Name, svc.SortOrder));
+    }
+
+    [Authorize]
+    [HttpPut("{id}/services/{serviceId:int}")]
+    public async Task<ActionResult<BranchServiceResponse>> UpdateService(string id, int serviceId, [FromBody] CreateBranchServiceRequest req)
+    {
+        var svc = await db.BranchServices.FirstOrDefaultAsync(s => s.Id == serviceId && s.BranchId == id);
+        if (svc == null) return NotFound();
+        svc.Name = req.Name.Trim();
+        await db.SaveChangesAsync();
+        return Ok(new BranchServiceResponse(svc.Id, svc.Name, svc.SortOrder));
+    }
+
+    [Authorize]
+    [HttpDelete("{id}/services/{serviceId:int}")]
+    public async Task<IActionResult> DeleteService(string id, int serviceId)
+    {
+        var svc = await db.BranchServices.FirstOrDefaultAsync(s => s.Id == serviceId && s.BranchId == id);
+        if (svc == null) return NotFound();
+        db.BranchServices.Remove(svc);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
     private static BranchResponse Map(Branch b) => new(
         b.Id, b.Name, b.Category, b.Address, b.City, b.MaxCapacity, b.GraceMinutes,
         b.OpensAt?.ToString("HH:mm"), b.ClosesAt?.ToString("HH:mm"),
