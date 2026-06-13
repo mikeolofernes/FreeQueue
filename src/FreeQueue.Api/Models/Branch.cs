@@ -12,6 +12,7 @@ public class Branch
     public TimeOnly? OpensAt { get; set; }
     public TimeOnly? ClosesAt { get; set; }
     public string? KioskPin { get; set; }
+    public bool IsOpen { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<QueueTicket> Tickets { get; set; } = [];

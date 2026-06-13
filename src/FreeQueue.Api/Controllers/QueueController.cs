@@ -20,6 +20,7 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
     {
         var branch = await db.Branches.FindAsync(branchId);
         if (branch == null) return NotFound("Branch not found.");
+        if (!branch.IsOpen) return BadRequest("Queue is currently closed.");
         if (branch.KioskPin != null && branch.KioskPin != req.KioskPin?.Trim())
             return Unauthorized("Invalid kiosk PIN.");
 
@@ -69,6 +70,14 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
     }
 
+    [HttpPost("ticket/{ticketId:int}/skip")]
+    public async Task<IActionResult> Skip(int ticketId)
+    {
+        try { await queue.SkipAsync(ticketId); return Ok(); }
+        catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+    }
+
     [HttpGet("{branchId}/status")]
     public async Task<ActionResult<QueueStatusResponse>> GetStatus(string branchId)
     {
@@ -80,10 +89,10 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
 
     [Authorize]
     [HttpPost("{branchId}/callnext")]
-    public async Task<ActionResult<QueueStatusResponse>> CallNext(string branchId)
+    public async Task<ActionResult<QueueStatusResponse>> CallNext(string branchId, [FromQuery] string? counterId = null)
     {
         if (CheckBranch(branchId) is { } denied) return denied;
-        try { return Ok(await queue.CallNextAsync(branchId)); }
+        try { return Ok(await queue.CallNextAsync(branchId, counterId)); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
     }
 
@@ -122,6 +131,23 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
         if (CheckBranch(branchId) is { } denied) return denied;
         await queue.BroadcastMessageAsync(branchId, req.Message);
         return Ok();
+    }
+
+    [Authorize]
+    [HttpPost("ticket/{ticketId:int}/no-show")]
+    public async Task<IActionResult> NoShow(int ticketId, [FromQuery] string? counterId = null)
+    {
+        try { await queue.NoShowAsync(ticketId, counterId); return Ok(); }
+        catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+    }
+
+    [Authorize]
+    [HttpPut("ticket/{ticketId:int}/transfer")]
+    public async Task<ActionResult<TicketResponse>> Transfer(int ticketId, [FromBody] TransferTicketRequest req)
+    {
+        try { return Ok(await queue.TransferAsync(ticketId, req.NewServiceType)); }
+        catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
     }
 
     private ActionResult? CheckBranch(string branchId)

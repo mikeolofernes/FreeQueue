@@ -11,38 +11,34 @@ namespace FreeQueue.Api.Controllers;
 [Route("api/admin")]
 public class AdminController(AppDbContext db) : ControllerBase
 {
-    /// <summary>Returns whether the initial admin account has been created yet.</summary>
+    // Public: check if any admin account exists
     [HttpGet("needs-setup")]
-    public async Task<IActionResult> NeedsSetup() =>
-        Ok(new { needsSetup = !await db.StaffAccounts.AnyAsync(a => a.Role == "admin") });
+    public async Task<ActionResult<object>> NeedsSetup()
+    {
+        var hasAdmin = await db.StaffAccounts.AnyAsync(a => a.Role == "admin");
+        return Ok(new { needsSetup = !hasAdmin });
+    }
 
-    /// <summary>Creates the first admin account. Locked out once any admin exists.</summary>
+    // Public (runs once): create first branch + admin account
     [HttpPost("setup")]
-    public async Task<IActionResult> Setup([FromBody] AdminSetupRequest req)
+    public async Task<IActionResult> Setup(AdminSetupRequest req)
     {
         if (await db.StaffAccounts.AnyAsync(a => a.Role == "admin"))
-            return Conflict("An admin account already exists.");
+            return Conflict("Admin already set up.");
 
-        if (await db.StaffAccounts.AnyAsync(a => a.Username == req.Username))
-            return Conflict($"Username '{req.Username}' is already taken.");
-
+        // Create branch if it doesn't exist
         if (!await db.Branches.AnyAsync(b => b.Id == req.BranchId))
         {
-            db.Branches.Add(new Branch
-            {
-                Id = req.BranchId.Trim(),
-                Name = req.BranchName.Trim() != string.Empty ? req.BranchName.Trim() : req.BranchId.Trim(),
-                MaxCapacity = 50,
-                GraceMinutes = 15,
-            });
+            db.Branches.Add(new Branch { Id = req.BranchId, Name = req.BranchName });
             await db.SaveChangesAsync();
         }
 
+        var hash = BCrypt.Net.BCrypt.HashPassword(req.Password);
         db.StaffAccounts.Add(new StaffAccount
         {
-            BranchId = req.BranchId.Trim(),
-            Username = req.Username.Trim(),
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
+            BranchId = req.BranchId,
+            Username = req.Username,
+            PasswordHash = hash,
             Role = "admin",
         });
         await db.SaveChangesAsync();
@@ -50,33 +46,36 @@ public class AdminController(AppDbContext db) : ControllerBase
         return Ok(new { message = "Admin account created." });
     }
 
+    // ── All below require admin role ──────────────────────────────────────────
+
     [Authorize(Roles = "admin")]
     [HttpGet("overview")]
-    public async Task<IEnumerable<AdminBranchResponse>> Overview()
+    public async Task<ActionResult<IEnumerable<AdminBranchResponse>>> GetOverview()
     {
-        var branches = await db.Branches.OrderBy(b => b.Name).ToListAsync();
-        var accounts = await db.StaffAccounts.OrderBy(a => a.Username).ToListAsync();
+        var branches = await db.Branches
+            .Include(b => b.Services)
+            .ToListAsync();
 
-        return branches.Select(b => new AdminBranchResponse(
-            b.Id, b.Name, b.Category,
-            accounts.Where(a => a.BranchId == b.Id)
-                    .Select(a => new AdminAccountResponse(a.Id, a.Username, a.Role, a.CreatedAt))));
+        var accounts = await db.StaffAccounts.ToListAsync();
+
+        return Ok(branches.Select(b => new AdminBranchResponse(
+            b.Id,
+            b.Name,
+            b.Category,
+            accounts
+                .Where(a => a.BranchId == b.Id)
+                .Select(a => new AdminAccountResponse(a.Id, a.Username, a.Role, a.CreatedAt))
+        )));
     }
 
     [Authorize(Roles = "admin")]
     [HttpPost("branches")]
-    public async Task<ActionResult<AdminBranchResponse>> CreateBranch([FromBody] AdminCreateBranchRequest req)
+    public async Task<ActionResult<AdminBranchResponse>> CreateBranch(AdminCreateBranchRequest req)
     {
         if (await db.Branches.AnyAsync(b => b.Id == req.Id))
             return Conflict($"Branch '{req.Id}' already exists.");
 
-        var branch = new Branch
-        {
-            Id = req.Id.Trim(),
-            Name = req.Name.Trim() != string.Empty ? req.Name.Trim() : req.Id.Trim(),
-            MaxCapacity = 50,
-            GraceMinutes = 15,
-        };
+        var branch = new Branch { Id = req.Id, Name = req.Name };
         db.Branches.Add(branch);
         await db.SaveChangesAsync();
 
@@ -85,21 +84,21 @@ public class AdminController(AppDbContext db) : ControllerBase
 
     [Authorize(Roles = "admin")]
     [HttpPost("accounts")]
-    public async Task<ActionResult<AdminAccountResponse>> CreateAccount([FromBody] AdminCreateAccountRequest req)
+    public async Task<ActionResult<AdminAccountResponse>> CreateAccount(AdminCreateAccountRequest req)
     {
         if (!await db.Branches.AnyAsync(b => b.Id == req.BranchId))
             return NotFound($"Branch '{req.BranchId}' not found.");
 
         if (await db.StaffAccounts.AnyAsync(a => a.Username == req.Username))
-            return Conflict($"Username '{req.Username}' is already taken.");
+            return Conflict($"Username '{req.Username}' already exists.");
 
-        var role = req.Role == "admin" ? "admin" : "staff";
+        var hash = BCrypt.Net.BCrypt.HashPassword(req.Password);
         var account = new StaffAccount
         {
             BranchId = req.BranchId,
-            Username = req.Username.Trim(),
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
-            Role = role,
+            Username = req.Username,
+            PasswordHash = hash,
+            Role = req.Role,
         };
         db.StaffAccounts.Add(account);
         await db.SaveChangesAsync();
@@ -109,11 +108,10 @@ public class AdminController(AppDbContext db) : ControllerBase
 
     [Authorize(Roles = "admin")]
     [HttpPut("accounts/{id:int}/password")]
-    public async Task<IActionResult> ResetPassword(int id, [FromBody] AdminResetPasswordRequest req)
+    public async Task<IActionResult> ResetPassword(int id, AdminResetPasswordRequest req)
     {
         var account = await db.StaffAccounts.FindAsync(id);
         if (account == null) return NotFound();
-
         account.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password);
         await db.SaveChangesAsync();
         return NoContent();
@@ -125,7 +123,6 @@ public class AdminController(AppDbContext db) : ControllerBase
     {
         var account = await db.StaffAccounts.FindAsync(id);
         if (account == null) return NotFound();
-
         db.StaffAccounts.Remove(account);
         await db.SaveChangesAsync();
         return NoContent();

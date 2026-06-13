@@ -13,7 +13,8 @@ public class QueueService(
     AppDbContext db,
     WaitTimeEstimator estimator,
     IHubContext<QueueHub> hub,
-    IConnectionMultiplexer redis)
+    IConnectionMultiplexer redis,
+    ISmsService sms)
 {
     private const int MaxSkipsBeforeRemoval = 2;
     private const int MaxUndoLevels = 5;
@@ -24,6 +25,9 @@ public class QueueService(
     {
         var branch = await db.Branches.FindAsync(req.BranchId)
             ?? throw new KeyNotFoundException($"Branch '{req.BranchId}' not found.");
+
+        if (!branch.IsOpen)
+            throw new InvalidOperationException("Queue is currently closed.");
 
         var activeCount = await ActiveCountAsync(req.BranchId);
         if (activeCount >= branch.MaxCapacity)
@@ -46,6 +50,7 @@ public class QueueService(
             ServiceType = req.ServiceType,
             CustomerName = req.CustomerName,
             Phone = req.Phone,
+            Priority = req.Priority,
             Status = TicketStatus.Waiting,
             ViewToken = Guid.NewGuid().ToString("N"),
         };
@@ -53,7 +58,7 @@ public class QueueService(
         db.QueueTickets.Add(ticket);
         await db.SaveChangesAsync();
 
-        var peopleAhead = await PeopleAheadAsync(req.BranchId, ticket.TicketNumber);
+        var peopleAhead = await PeopleAheadAsync(req.BranchId, ticket.TicketNumber, ticket.Priority);
         var estimate = await estimator.EstimateAsync(req.BranchId, req.ServiceType, peopleAhead);
 
         await BroadcastQueueStateAsync(req.BranchId);
@@ -67,7 +72,6 @@ public class QueueService(
     {
         var now = DateTime.UtcNow;
 
-        // Log the completed transaction for wait-time estimation
         if (req.DurationSecs > 0)
         {
             db.QueueTransactions.Add(new QueueTransaction
@@ -83,7 +87,6 @@ public class QueueService(
             });
         }
 
-        // Mark current ticket as served
         var current = await db.QueueTickets
             .Where(t => t.BranchId == req.BranchId && t.TicketNumber == req.TicketNumber)
             .FirstOrDefaultAsync();
@@ -92,38 +95,43 @@ public class QueueService(
         {
             current.Status = TicketStatus.Served;
             current.ServedAt = now;
+            if (req.CounterId != null) current.CounterId = req.CounterId;
         }
 
         await db.SaveChangesAsync();
-
-        // Save to undo stack in Redis
         await PushUndoAsync(req.BranchId, req.TicketNumber);
 
-        // Call the next ticket
         var next = await NextActiveTicketAsync(req.BranchId);
         if (next != null)
         {
             next.Status = TicketStatus.Near;
             next.CalledAt = now;
+            if (req.CounterId != null) next.CounterId = req.CounterId;
             await db.SaveChangesAsync();
 
             await hub.Clients.Group(QueueHub.BranchGroup(req.BranchId))
                 .SendAsync("TicketUpdated", new { ticketId = next.Id, status = next.Status, peopleAhead = 0 });
+
+            // "Your turn soon" — notify 2nd in queue
+            await NotifyYourTurnSoonAsync(req.BranchId, next.TicketNumber);
         }
 
         return await BroadcastQueueStateAsync(req.BranchId);
     }
 
-    // ── Call Next (no current ticket — start of session or after a gap) ──────
+    // ── Call Next ─────────────────────────────────────────────────────────────
 
-    public async Task<QueueStatusResponse> CallNextAsync(string branchId)
+    public async Task<QueueStatusResponse> CallNextAsync(string branchId, string? counterId = null)
     {
         var next = await NextActiveTicketAsync(branchId);
         if (next != null)
         {
             next.Status = TicketStatus.Near;
             next.CalledAt = DateTime.UtcNow;
+            if (counterId != null) next.CounterId = counterId;
             await db.SaveChangesAsync();
+
+            await NotifyYourTurnSoonAsync(branchId, next.TicketNumber);
         }
         return await BroadcastQueueStateAsync(branchId);
     }
@@ -133,7 +141,68 @@ public class QueueService(
     public async Task<TicketResponse> AddWalkInAsync(AddWalkInRequest req)
     {
         return await JoinQueueAsync(new JoinQueueRequest(
-            req.BranchId, req.ServiceType, req.CustomerName ?? "Walk-in", req.Phone));
+            req.BranchId, req.ServiceType, req.CustomerName ?? "Walk-in", req.Phone, req.Priority));
+    }
+
+    // ── No-show ───────────────────────────────────────────────────────────────
+
+    public async Task NoShowAsync(int ticketId, string? counterId = null)
+    {
+        var ticket = await db.QueueTickets.FindAsync(ticketId)
+            ?? throw new KeyNotFoundException($"Ticket {ticketId} not found.");
+
+        ticket.Status = TicketStatus.NoShow;
+        ticket.AbandonedAt = DateTime.UtcNow;
+        if (counterId != null) ticket.CounterId = counterId;
+        await db.SaveChangesAsync();
+
+        // Call the next ticket automatically after a no-show
+        var next = await NextActiveTicketAsync(ticket.BranchId);
+        if (next != null)
+        {
+            next.Status = TicketStatus.Near;
+            next.CalledAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            await NotifyYourTurnSoonAsync(ticket.BranchId, next.TicketNumber);
+        }
+
+        await BroadcastQueueStateAsync(ticket.BranchId);
+    }
+
+    // ── Transfer ──────────────────────────────────────────────────────────────
+
+    public async Task<TicketResponse> TransferAsync(int ticketId, string newServiceType)
+    {
+        var ticket = await GetActiveTicketAsync(ticketId);
+        ticket.ServiceType = newServiceType;
+        // Move to end of queue so fair ordering is maintained
+        var maxNumber = await db.QueueTickets
+            .Where(t => t.BranchId == ticket.BranchId)
+            .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
+        ticket.TicketNumber = maxNumber + 1;
+        ticket.Status = TicketStatus.Waiting;
+        await db.SaveChangesAsync();
+
+        await BroadcastQueueStateAsync(ticket.BranchId);
+
+        var peopleAhead = await PeopleAheadAsync(ticket.BranchId, ticket.TicketNumber, ticket.Priority);
+        var estimate = await estimator.EstimateAsync(ticket.BranchId, ticket.ServiceType, peopleAhead);
+        return MapTicket(ticket, peopleAhead, estimate);
+    }
+
+    // ── Queue open/close toggle ───────────────────────────────────────────────
+
+    public async Task<bool> ToggleOpenAsync(string branchId)
+    {
+        var branch = await db.Branches.FindAsync(branchId)
+            ?? throw new KeyNotFoundException($"Branch '{branchId}' not found.");
+        branch.IsOpen = !branch.IsOpen;
+        await db.SaveChangesAsync();
+
+        await hub.Clients.Group(QueueHub.BranchGroup(branchId))
+            .SendAsync("BranchStatusChanged", new { branchId, isOpen = branch.IsOpen });
+
+        return branch.IsOpen;
     }
 
     // ── Ticket actions ────────────────────────────────────────────────────────
@@ -146,11 +215,10 @@ public class QueueService(
         if (ticket.SkipCount >= MaxSkipsBeforeRemoval)
         {
             ticket.Status = TicketStatus.Cancelled;
+            ticket.AbandonedAt = DateTime.UtcNow;
         }
         else
         {
-            ticket.Status = TicketStatus.Skipped;
-            // Re-insert at end by bumping ticket number past current max
             var maxNumber = await db.QueueTickets
                 .Where(t => t.BranchId == ticket.BranchId)
                 .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
@@ -167,6 +235,10 @@ public class QueueService(
         var ticket = await GetActiveTicketAsync(ticketId);
         if (ticket.ViewToken != null && ticket.ViewToken != viewToken)
             throw new UnauthorizedAccessException("Invalid view token.");
+
+        // Track abandonment position
+        ticket.AbandonPosition = await PeopleAheadAsync(ticket.BranchId, ticket.TicketNumber, ticket.Priority);
+        ticket.AbandonedAt = DateTime.UtcNow;
         ticket.Status = TicketStatus.Cancelled;
         await db.SaveChangesAsync();
         await BroadcastQueueStateAsync(ticket.BranchId);
@@ -186,7 +258,6 @@ public class QueueService(
         var lastTicketNumber = (int)val;
         var now = DateTime.UtcNow;
 
-        // Restore the served ticket back to waiting
         var ticket = await db.QueueTickets
             .Where(t => t.BranchId == branchId && t.TicketNumber == lastTicketNumber && t.Status == TicketStatus.Served)
             .FirstOrDefaultAsync();
@@ -197,7 +268,6 @@ public class QueueService(
         ticket.Status = TicketStatus.Waiting;
         ticket.ServedAt = null;
 
-        // Also delete the transaction log entry
         var txn = await db.QueueTransactions
             .Where(t => t.BranchId == branchId && t.TicketNumber == lastTicketNumber)
             .OrderByDescending(t => t.CreatedAt)
@@ -206,7 +276,6 @@ public class QueueService(
         if (txn != null)
             db.QueueTransactions.Remove(txn);
 
-        // Move any "Near" ticket back to Waiting
         var calledNext = await db.QueueTickets
             .Where(t => t.BranchId == branchId && t.Status == TicketStatus.Near)
             .FirstOrDefaultAsync();
@@ -227,9 +296,12 @@ public class QueueService(
 
     public async Task<QueueStatusResponse> GetQueueStatusAsync(string branchId)
     {
+        var branch = await db.Branches.FindAsync(branchId);
+
         var activeTickets = await db.QueueTickets
             .Where(t => t.BranchId == branchId && TicketStatus.Active.Contains(t.Status))
-            .OrderBy(t => t.TicketNumber)
+            .OrderByDescending(t => t.Priority)
+            .ThenBy(t => t.TicketNumber)
             .ToListAsync();
 
         var servedToday = await db.QueueTickets
@@ -244,6 +316,13 @@ public class QueueService(
         if (current != null)
             estimate = await estimator.EstimateAsync(branchId, current.ServiceType, waiting);
 
+        // Next 3 in waiting (for display board)
+        var nextTickets = activeTickets
+            .Where(t => t.Status == TicketStatus.Waiting)
+            .Take(3)
+            .Select(t => t.TicketNumber)
+            .ToList();
+
         return new QueueStatusResponse(
             branchId,
             current?.TicketNumber,
@@ -251,7 +330,11 @@ public class QueueService(
             activeTickets.Count,
             servedToday,
             waiting,
-            estimate
+            estimate,
+            IsOpen: branch?.IsOpen ?? true,
+            NextTicketNumbers: nextTickets,
+            CounterId: current?.CounterId,
+            CurrentTicketId: current?.Id
         );
     }
 
@@ -261,7 +344,7 @@ public class QueueService(
             ?? throw new KeyNotFoundException($"Ticket {ticketId} not found.");
 
         var peopleAhead = TicketStatus.Active.Contains(ticket.Status)
-            ? await PeopleAheadAsync(ticket.BranchId, ticket.TicketNumber)
+            ? await PeopleAheadAsync(ticket.BranchId, ticket.TicketNumber, ticket.Priority)
             : 0;
 
         var estimate = await estimator.EstimateAsync(ticket.BranchId, ticket.ServiceType, peopleAhead);
@@ -306,6 +389,30 @@ public class QueueService(
             .SendAsync("TicketScanned", ticketId);
     }
 
+    // ── "Your turn soon" SMS helper ───────────────────────────────────────────
+
+    private async Task NotifyYourTurnSoonAsync(string branchId, int currentTicketNumber)
+    {
+        // Find the 2nd person in the queue
+        var second = await db.QueueTickets
+            .Where(t => t.BranchId == branchId && t.Status == TicketStatus.Waiting)
+            .OrderByDescending(t => t.Priority)
+            .ThenBy(t => t.TicketNumber)
+            .Skip(0)
+            .FirstOrDefaultAsync();
+
+        if (second?.Phone == null) return;
+
+        // Deduplicate SMS via Redis
+        var cache = redis.GetDatabase();
+        var key = $"sms_soon:{second.Id}";
+        if (!await cache.StringSetAsync(key, 1, TimeSpan.FromMinutes(10), when: When.NotExists))
+            return;
+
+        var msg = $"QueueFree: You're next! Ticket #{second.TicketNumber} ({second.ServiceType}). Please be ready.";
+        await sms.SendAsync(second.Phone, msg);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task<QueueTicket> GetActiveTicketAsync(int ticketId)
@@ -341,20 +448,37 @@ public class QueueService(
     private async Task<int> ActiveCountAsync(string branchId) =>
         await db.QueueTickets.CountAsync(t => t.BranchId == branchId && TicketStatus.Active.Contains(t.Status));
 
-    private async Task<int> PeopleAheadAsync(string branchId, int ticketNumber) =>
-        await db.QueueTickets.CountAsync(t =>
+    private async Task<int> PeopleAheadAsync(string branchId, int ticketNumber, bool isPriority)
+    {
+        if (isPriority)
+        {
+            // Priority tickets only have other priority tickets ahead
+            return await db.QueueTickets.CountAsync(t =>
+                t.BranchId == branchId &&
+                t.Priority &&
+                t.TicketNumber < ticketNumber &&
+                TicketStatus.Active.Contains(t.Status));
+        }
+        // Regular tickets: all priority tickets + regular tickets with lower number
+        var priorityCount = await db.QueueTickets.CountAsync(t =>
+            t.BranchId == branchId && t.Priority && TicketStatus.Active.Contains(t.Status));
+        var regularAhead = await db.QueueTickets.CountAsync(t =>
             t.BranchId == branchId &&
+            !t.Priority &&
             t.TicketNumber < ticketNumber &&
             TicketStatus.Active.Contains(t.Status));
+        return priorityCount + regularAhead;
+    }
 
     private async Task<QueueTicket?> NextActiveTicketAsync(string branchId) =>
         await db.QueueTickets
             .Where(t => t.BranchId == branchId && t.Status == TicketStatus.Waiting)
-            .OrderBy(t => t.TicketNumber)
+            .OrderByDescending(t => t.Priority)
+            .ThenBy(t => t.TicketNumber)
             .FirstOrDefaultAsync();
 
     private static TicketResponse MapTicket(QueueTicket t, int peopleAhead, WaitEstimateDto? estimate) =>
-        new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate, t.ViewToken);
+        new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate, t.ViewToken, t.Priority, t.CounterId);
 
     private async Task<QueueStatusResponse> BroadcastQueueStateAsync(string branchId)
     {
@@ -374,13 +498,6 @@ public class QueueService(
         }
 
         return status;
-    }
-
-    private async Task BroadcastTicketUpdate(QueueTicket ticket)
-    {
-        var peopleAhead = await PeopleAheadAsync(ticket.BranchId, ticket.TicketNumber);
-        await hub.Clients.Group(QueueHub.BranchGroup(ticket.BranchId))
-            .SendAsync("TicketUpdated", new { ticketId = ticket.Id, ticket.Status, peopleAhead });
     }
 
     private async Task PushUndoAsync(string branchId, int ticketNumber)

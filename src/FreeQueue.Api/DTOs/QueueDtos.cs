@@ -4,34 +4,40 @@ public record JoinQueueRequest(
     string BranchId,
     string ServiceType,
     string? CustomerName,
-    string? Phone
+    string? Phone,
+    bool Priority = false
 );
 
 public record KioskJoinRequest(
     string ServiceType,
     string? CustomerName,
     string? Phone,
-    string? KioskPin
+    string? KioskPin,
+    bool Priority = false
 );
 
 public record AdvanceQueueRequest(
     string BranchId,
     int TicketNumber,
     string ServiceType,
-    int DurationSecs
+    int DurationSecs,
+    string? CounterId = null
 );
 
 public record AddWalkInRequest(
     string BranchId,
     string ServiceType,
     string? CustomerName,
-    string? Phone
+    string? Phone,
+    bool Priority = false
 );
 
 public record BroadcastRequest(
     string BranchId,
     string Message
 );
+
+public record TransferTicketRequest(string NewServiceType);
 
 public record TicketResponse(
     int Id,
@@ -43,7 +49,9 @@ public record TicketResponse(
     int PeopleAhead,
     DateTime JoinedAt,
     WaitEstimateDto? WaitEstimate,
-    string? ViewToken
+    string? ViewToken,
+    bool Priority = false,
+    string? CounterId = null
 );
 
 public record QueueStatusResponse(
@@ -53,7 +61,11 @@ public record QueueStatusResponse(
     int ActiveCount,
     int ServedToday,
     int PeopleWaiting,
-    WaitEstimateDto? WaitEstimate
+    WaitEstimateDto? WaitEstimate,
+    bool IsOpen = true,
+    IReadOnlyList<int>? NextTicketNumbers = null,
+    string? CounterId = null,
+    int? CurrentTicketId = null
 );
 
 public record WaitEstimateDto(

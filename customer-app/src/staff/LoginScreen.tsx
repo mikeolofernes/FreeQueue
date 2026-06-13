@@ -42,7 +42,7 @@ export function LoginScreen({ onLogin }: Props) {
             <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
             <input
               className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-brand"
-              placeholder="staff"
+              placeholder="staff_user"
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
@@ -72,6 +72,10 @@ export function LoginScreen({ onLogin }: Props) {
             {loading ? '…' : 'Login'}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-xs text-gray-400">
+          Need an account? Contact your admin.
+        </p>
       </div>
     </div>
   )

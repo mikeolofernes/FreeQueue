@@ -20,6 +20,7 @@ export function DisplayPage() {
     onQueueAdvanced: s => setStatus(s),
     onConnected: () => { setConnected(true); refreshStatus() },
     onDisconnected: () => setConnected(false),
+    onBranchStatusChanged: isOpen => setStatus(s => s ? { ...s, isOpen } : s),
   })
 
   if (!branchId) {
@@ -30,6 +31,9 @@ export function DisplayPage() {
     )
   }
 
+  const nextTickets = status?.nextTicketNumbers ?? []
+  const upNext = nextTickets.slice(0, 3)
+
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-12 gap-10 select-none">
       <div className="text-center">
@@ -38,6 +42,11 @@ export function DisplayPage() {
           <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-gray-500'}`} />
           {connected ? 'Live' : 'Connecting…'}
         </div>
+        {status && !status.isOpen && (
+          <div className="mt-3 px-4 py-2 bg-red-500/20 rounded-full">
+            <span className="text-red-400 text-sm font-medium">Queue Closed</span>
+          </div>
+        )}
       </div>
 
       <div className="text-center">
@@ -48,11 +57,28 @@ export function DisplayPage() {
               #{status.currentTicketNumber}
             </div>
             <p className="text-gray-300 text-2xl mt-2">{status.currentServiceType}</p>
+            {status.counterId && (
+              <p className="text-teal-400 text-lg mt-1">Counter {status.counterId}</p>
+            )}
           </>
         ) : (
           <div className="text-[120px] font-black leading-none text-gray-600">—</div>
         )}
       </div>
+
+      {/* Next up tickets */}
+      {upNext.length > 0 && (
+        <div className="text-center">
+          <p className="text-gray-500 text-sm uppercase tracking-widest mb-3">Next Up</p>
+          <div className="flex gap-6 justify-center">
+            {upNext.map((num, i) => (
+              <div key={num} className={`text-center ${i === 0 ? 'opacity-100' : 'opacity-50'}`}>
+                <div className="text-5xl font-black tabular-nums text-gray-300">#{num}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-16 text-center">
         <div>

@@ -9,6 +9,7 @@ public static class TicketStatus
     public const string Served = "served";
     public const string Skipped = "skipped";
     public const string Cancelled = "cancelled";
+    public const string NoShow = "noshow";
 
     public static readonly string[] Active = [Waiting, Away, Near, Arrived];
 }

@@ -8,8 +8,9 @@ export interface TicketResponse {
   peopleAhead: number
   joinedAt: string
   waitEstimate: WaitEstimate | null
-  viewedAt: string | null
   viewToken: string | null
+  priority: boolean
+  counterId: string | null
 }
 
 export interface WaitEstimate {
@@ -27,6 +28,7 @@ export interface BranchResponse {
   maxCapacity: number
   graceMinutes: number
   hasKioskPin: boolean
+  isOpen: boolean
 }
 
 export interface QueueStatus {
@@ -37,6 +39,10 @@ export interface QueueStatus {
   servedToday: number
   peopleWaiting: number
   waitEstimate: WaitEstimate | null
+  isOpen: boolean
+  nextTicketNumbers: number[] | null
+  counterId: string | null
+  currentTicketId: number | null
 }
 
 export interface UndoResponse {
@@ -62,4 +68,38 @@ export interface AdminBranch {
   name: string
   category: string | null
   accounts: AdminAccount[]
+}
+
+export interface AnalyticsData {
+  branchId: string
+  totalServedToday: number
+  currentlyWaiting: number
+  avgWaitMinutes: number
+  hourlyBreakdown: HourlyStats[]
+  serviceBreakdown: ServiceStats[]
+  csatScore: number
+}
+
+export interface HourlyStats {
+  hour: number
+  count: number
+  avgDurationSecs: number
+}
+
+export interface ServiceStats {
+  serviceType: string
+  count: number
+  avgDurationSecs: number
+}
+
+export interface Appointment {
+  id: number
+  branchId: string
+  serviceType: string
+  customerName: string
+  phone: string | null
+  scheduledAt: string
+  status: string
+  notes: string | null
+  createdAt: string
 }

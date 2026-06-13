@@ -6,7 +6,7 @@ public class StaffAccount
     public string BranchId { get; set; } = default!;
     public string Username { get; set; } = default!;
     public string PasswordHash { get; set; } = default!;
-    public string Role { get; set; } = "staff"; // "staff" | "admin"
+    public string Role { get; set; } = "staff";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Branch Branch { get; set; } = default!;

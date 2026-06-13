@@ -12,21 +12,20 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Database ──────────────────────────────────────────────────────────────────
+// Database
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
-// ── Redis ─────────────────────────────────────────────────────────────────────
+// Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
 
-// ── Application services ──────────────────────────────────────────────────────
+// Application services
 builder.Services.AddScoped<WaitTimeEstimator>();
 builder.Services.AddScoped<QueueService>();
-builder.Services.AddHttpClient<SmsService>();
-builder.Services.AddSingleton<ISmsService, SmsService>();
+builder.Services.AddHttpClient<ISmsService, SmsService>();
 
-// ── Rate limiting ─────────────────────────────────────────────────────────────
+// Rate limiting
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -47,7 +46,7 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(5) }));
 });
 
-// ── JWT Authentication ────────────────────────────────────────────────────────
+// JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? throw new InvalidOperationException("Jwt:Secret is required in configuration.");
 
@@ -68,17 +67,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-
-// ── SignalR ───────────────────────────────────────────────────────────────────
+// SignalR
 builder.Services.AddSignalR();
 
-// ── Controllers + Swagger ─────────────────────────────────────────────────────
+// Controllers + Swagger
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "QueueFree API", Version = "v1" });
-    // Allow pasting a JWT in Swagger UI
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -96,8 +93,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
-// In production set CORS__ALLOWEDORIGINS__0 / __1 etc. as Railway env vars.
+// CORS
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
@@ -107,23 +103,23 @@ builder.Services.AddCors(options =>
         if (allowedOrigins.Length > 0)
             p.WithOrigins(allowedOrigins);
         else
-            p.SetIsOriginAllowed(_ => true); // dev fallback — no origins configured
+            p.SetIsOriginAllowed(_ => true);
     });
 });
 
 var app = builder.Build();
 
-// ── Ensure DB schema ──────────────────────────────────────────────────────────
+// Ensure DB schema
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    // EnsureCreated only runs on a brand-new database. For existing databases
-    // we run idempotent ALTER scripts so new tables/columns are always present.
     await ctx.Database.EnsureCreatedAsync();
+
     await ctx.Database.ExecuteSqlRawAsync("""
         UPDATE "QueueTickets" SET "Status" = 'waiting' WHERE "Status" = 'away';
         ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "Rating" integer;
         """);
+
     await ctx.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS "StaffAccounts" (
             "Id"           SERIAL PRIMARY KEY,
@@ -131,25 +127,22 @@ using (var scope = app.Services.CreateScope())
             "Username"     VARCHAR(100) NOT NULL,
             "PasswordHash" TEXT         NOT NULL,
             "CreatedAt"    TIMESTAMP    NOT NULL DEFAULT NOW(),
-            CONSTRAINT "uq_StaffAccounts_BranchId_Username"
-                UNIQUE ("BranchId", "Username"),
             CONSTRAINT "FK_StaffAccounts_Branches_BranchId"
                 FOREIGN KEY ("BranchId") REFERENCES "Branches"("Id")
                 ON DELETE CASCADE
         );
         ALTER TABLE "Branches" ADD COLUMN IF NOT EXISTS "Category" VARCHAR(50) NULL;
         ALTER TABLE "Branches" ADD COLUMN IF NOT EXISTS "KioskPin" TEXT NULL;
-        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "ViewedAt" TIMESTAMP NULL;
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "ViewedAt"  TIMESTAMP NULL;
         ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "ViewToken" VARCHAR(32) NULL;
         """);
+
     await ctx.Database.ExecuteSqlRawAsync("""
-        -- Migrate StaffAccounts to globally-unique usernames
         ALTER TABLE "StaffAccounts" DROP CONSTRAINT IF EXISTS "uq_StaffAccounts_BranchId_Username";
         DROP INDEX IF EXISTS "IX_StaffAccounts_BranchId_Username";
         CREATE UNIQUE INDEX IF NOT EXISTS "IX_StaffAccounts_Username"
             ON "StaffAccounts"("Username");
 
-        -- Branch-specific services table
         CREATE TABLE IF NOT EXISTS "BranchServices" (
             "Id"        SERIAL PRIMARY KEY,
             "BranchId"  VARCHAR(100) NOT NULL,
@@ -160,12 +153,38 @@ using (var scope = app.Services.CreateScope())
         );
         CREATE INDEX IF NOT EXISTS "IX_BranchServices_BranchId" ON "BranchServices"("BranchId");
 
-        -- Staff account roles
         ALTER TABLE "StaffAccounts" ADD COLUMN IF NOT EXISTS "Role" VARCHAR(20) NOT NULL DEFAULT 'staff';
+        """);
+
+    await ctx.Database.ExecuteSqlRawAsync("""
+        ALTER TABLE "Branches"     ADD COLUMN IF NOT EXISTS "IsOpen"          BOOLEAN      NOT NULL DEFAULT TRUE;
+        ALTER TABLE "Branches"     ADD COLUMN IF NOT EXISTS "Address"         VARCHAR(300) NULL;
+        ALTER TABLE "Branches"     ADD COLUMN IF NOT EXISTS "City"            VARCHAR(100) NULL;
+
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "Priority"        BOOLEAN      NOT NULL DEFAULT FALSE;
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "AbandonedAt"     TIMESTAMP    NULL;
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "AbandonPosition" INTEGER      NULL;
+        ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "CounterId"       VARCHAR(50)  NULL;
+
+        CREATE TABLE IF NOT EXISTS "Appointments" (
+            "Id"           SERIAL PRIMARY KEY,
+            "BranchId"     VARCHAR(100)  NOT NULL,
+            "ServiceType"  VARCHAR(100)  NOT NULL,
+            "CustomerName" VARCHAR(200)  NOT NULL,
+            "Phone"        VARCHAR(20)   NULL,
+            "ScheduledAt"  TIMESTAMP     NOT NULL,
+            "Status"       VARCHAR(20)   NOT NULL DEFAULT 'pending',
+            "Notes"        VARCHAR(500)  NULL,
+            "CreatedAt"    TIMESTAMP     NOT NULL DEFAULT NOW(),
+            CONSTRAINT "FK_Appointments_Branches_BranchId"
+                FOREIGN KEY ("BranchId") REFERENCES "Branches"("Id") ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS "IX_Appointments_BranchId_ScheduledAt"
+            ON "Appointments"("BranchId", "ScheduledAt");
         """);
 }
 
-// ── Middleware pipeline ───────────────────────────────────────────────────────
+// Middleware pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

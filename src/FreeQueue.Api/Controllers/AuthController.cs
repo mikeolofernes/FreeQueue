@@ -1,9 +1,9 @@
-using BCrypt.Net;
 using FreeQueue.Api.Data;
 using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -16,8 +16,8 @@ namespace FreeQueue.Api.Controllers;
 [Route("api/auth")]
 public class AuthController(AppDbContext db, IConfiguration config) : ControllerBase
 {
+    [EnableRateLimiting("auth-login")]
     [HttpPost("login")]
-    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("auth-login")]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest req)
     {
         var account = await db.StaffAccounts
