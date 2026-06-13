@@ -176,10 +176,7 @@ public class QueueService(
         var ticket = await GetActiveTicketAsync(ticketId);
         ticket.ServiceType = newServiceType;
         // Move to end of queue so fair ordering is maintained
-        var maxNumber = await db.QueueTickets
-            .Where(t => t.BranchId == ticket.BranchId)
-            .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
-        ticket.TicketNumber = maxNumber + 1;
+        ticket.TicketNumber = await NextTicketNumberAsync(ticket.BranchId);
         ticket.Status = TicketStatus.Waiting;
         await db.SaveChangesAsync();
 
@@ -219,10 +216,7 @@ public class QueueService(
         }
         else
         {
-            var maxNumber = await db.QueueTickets
-                .Where(t => t.BranchId == ticket.BranchId)
-                .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
-            ticket.TicketNumber = maxNumber + 1;
+            ticket.TicketNumber = await NextTicketNumberAsync(ticket.BranchId);
             ticket.Status = TicketStatus.Waiting;
         }
 
