@@ -1,7 +1,6 @@
 namespace FreeQueue.Api.DTOs;
 
-public record AdminLoginRequest(string Password);
-public record AdminLoginResponse(string Token);
+public record AdminSetupRequest(string BranchId, string BranchName, string Username, string Password);
 
 public record AdminBranchResponse(
     string Id,
@@ -9,8 +8,8 @@ public record AdminBranchResponse(
     string? Category,
     IEnumerable<AdminAccountResponse> Accounts);
 
-public record AdminAccountResponse(int Id, string Username, DateTime CreatedAt);
+public record AdminAccountResponse(int Id, string Username, string Role, DateTime CreatedAt);
 
 public record AdminCreateBranchRequest(string Id, string Name);
-public record AdminCreateAccountRequest(string BranchId, string Username, string Password);
+public record AdminCreateAccountRequest(string BranchId, string Username, string Password, string Role = "staff");
 public record AdminResetPasswordRequest(string Password);

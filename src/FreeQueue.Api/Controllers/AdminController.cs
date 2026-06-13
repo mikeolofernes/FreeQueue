@@ -1,30 +1,53 @@
-using BCrypt.Net;
 using FreeQueue.Api.Data;
 using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
 
 namespace FreeQueue.Api.Controllers;
 
 [ApiController]
 [Route("api/admin")]
-public class AdminController(AppDbContext db, IConfiguration config) : ControllerBase
+public class AdminController(AppDbContext db) : ControllerBase
 {
-    [HttpPost("login")]
-    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("admin-login")]
-    public ActionResult<AdminLoginResponse> Login([FromBody] AdminLoginRequest req)
-    {
-        var adminPassword = config["Admin:Password"];
-        if (string.IsNullOrEmpty(adminPassword) || req.Password != adminPassword)
-            return Unauthorized("Invalid admin password.");
+    /// <summary>Returns whether the initial admin account has been created yet.</summary>
+    [HttpGet("needs-setup")]
+    public async Task<IActionResult> NeedsSetup() =>
+        Ok(new { needsSetup = !await db.StaffAccounts.AnyAsync(a => a.Role == "admin") });
 
-        return new AdminLoginResponse(BuildToken());
+    /// <summary>Creates the first admin account. Locked out once any admin exists.</summary>
+    [HttpPost("setup")]
+    public async Task<IActionResult> Setup([FromBody] AdminSetupRequest req)
+    {
+        if (await db.StaffAccounts.AnyAsync(a => a.Role == "admin"))
+            return Conflict("An admin account already exists.");
+
+        if (await db.StaffAccounts.AnyAsync(a => a.Username == req.Username))
+            return Conflict($"Username '{req.Username}' is already taken.");
+
+        if (!await db.Branches.AnyAsync(b => b.Id == req.BranchId))
+        {
+            db.Branches.Add(new Branch
+            {
+                Id = req.BranchId.Trim(),
+                Name = req.BranchName.Trim() != string.Empty ? req.BranchName.Trim() : req.BranchId.Trim(),
+                MaxCapacity = 50,
+                GraceMinutes = 15,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        db.StaffAccounts.Add(new StaffAccount
+        {
+            BranchId = req.BranchId.Trim(),
+            Username = req.Username.Trim(),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
+            Role = "admin",
+        });
+        await db.SaveChangesAsync();
+
+        return Ok(new { message = "Admin account created." });
     }
 
     [Authorize(Roles = "admin")]
@@ -37,7 +60,7 @@ public class AdminController(AppDbContext db, IConfiguration config) : Controlle
         return branches.Select(b => new AdminBranchResponse(
             b.Id, b.Name, b.Category,
             accounts.Where(a => a.BranchId == b.Id)
-                    .Select(a => new AdminAccountResponse(a.Id, a.Username, a.CreatedAt))));
+                    .Select(a => new AdminAccountResponse(a.Id, a.Username, a.Role, a.CreatedAt))));
     }
 
     [Authorize(Roles = "admin")]
@@ -50,7 +73,7 @@ public class AdminController(AppDbContext db, IConfiguration config) : Controlle
         var branch = new Branch
         {
             Id = req.Id.Trim(),
-            Name = req.Name.Trim(),
+            Name = req.Name.Trim() != string.Empty ? req.Name.Trim() : req.Id.Trim(),
             MaxCapacity = 50,
             GraceMinutes = 15,
         };
@@ -70,16 +93,18 @@ public class AdminController(AppDbContext db, IConfiguration config) : Controlle
         if (await db.StaffAccounts.AnyAsync(a => a.Username == req.Username))
             return Conflict($"Username '{req.Username}' is already taken.");
 
+        var role = req.Role == "admin" ? "admin" : "staff";
         var account = new StaffAccount
         {
             BranchId = req.BranchId,
             Username = req.Username.Trim(),
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
+            Role = role,
         };
         db.StaffAccounts.Add(account);
         await db.SaveChangesAsync();
 
-        return Ok(new AdminAccountResponse(account.Id, account.Username, account.CreatedAt));
+        return Ok(new AdminAccountResponse(account.Id, account.Username, account.Role, account.CreatedAt));
     }
 
     [Authorize(Roles = "admin")]
@@ -104,27 +129,5 @@ public class AdminController(AppDbContext db, IConfiguration config) : Controlle
         db.StaffAccounts.Remove(account);
         await db.SaveChangesAsync();
         return NoContent();
-    }
-
-    private string BuildToken()
-    {
-        var secret = config["Jwt:Secret"] ?? throw new InvalidOperationException("Jwt:Secret not configured.");
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.Role, "admin"),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-        };
-
-        var token = new JwtSecurityToken(
-            issuer: "freequeue",
-            audience: "freequeue-staff",
-            claims: claims,
-            expires: DateTime.UtcNow.AddHours(24),
-            signingCredentials: creds);
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }

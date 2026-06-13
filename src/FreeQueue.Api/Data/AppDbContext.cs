@@ -47,6 +47,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(a => a.Id);
             e.Property(a => a.Username).HasMaxLength(100).IsRequired();
             e.Property(a => a.PasswordHash).IsRequired();
+            e.Property(a => a.Role).HasMaxLength(20).HasDefaultValue("staff").IsRequired();
             e.HasIndex(a => a.Username).IsUnique();
             e.HasOne(a => a.Branch).WithMany().HasForeignKey(a => a.BranchId);
         });

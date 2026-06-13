@@ -16,8 +16,8 @@ namespace FreeQueue.Api.Controllers;
 [Route("api/auth")]
 public class AuthController(AppDbContext db, IConfiguration config) : ControllerBase
 {
-    /// <summary>Staff login — returns a JWT valid for 12 hours.</summary>
     [HttpPost("login")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("auth-login")]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest req)
     {
         var account = await db.StaffAccounts
@@ -26,45 +26,11 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
         if (account == null || !BCrypt.Net.BCrypt.Verify(req.Password, account.PasswordHash))
             return Unauthorized("Invalid username or password.");
 
-        var token = BuildToken(account.BranchId, account.Username);
-        return new LoginResponse(token, account.BranchId, account.Username);
+        var token = BuildToken(account.BranchId, account.Username, account.Role);
+        return new LoginResponse(token, account.BranchId, account.Username, account.Role);
     }
 
-    /// <summary>
-    /// Create or update a staff account for a branch.
-    /// Requires an existing staff JWT — prevents unauthenticated account creation.
-    /// </summary>
-    [Authorize]
-    [HttpPost("setup")]
-    public async Task<IActionResult> Setup(SetPasswordRequest req)
-    {
-        if (!await db.Branches.AnyAsync(b => b.Id == req.BranchId))
-            return NotFound($"Branch '{req.BranchId}' not found.");
-
-        var account = await db.StaffAccounts
-            .FirstOrDefaultAsync(a => a.BranchId == req.BranchId && a.Username == req.Username);
-
-        var hash = BCrypt.Net.BCrypt.HashPassword(req.Password);
-
-        if (account == null)
-        {
-            db.StaffAccounts.Add(new StaffAccount
-            {
-                BranchId = req.BranchId,
-                Username = req.Username,
-                PasswordHash = hash,
-            });
-        }
-        else
-        {
-            account.PasswordHash = hash;
-        }
-
-        await db.SaveChangesAsync();
-        return Ok(new { message = $"Account '{req.Username}' ready for branch '{req.BranchId}'." });
-    }
-
-    private string BuildToken(string branchId, string username)
+    private string BuildToken(string branchId, string username, string role)
     {
         var secret = config["Jwt:Secret"] ?? throw new InvalidOperationException("Jwt:Secret not configured.");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
@@ -74,6 +40,7 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
         {
             new Claim("branch_id", branchId),
             new Claim(ClaimTypes.Name, username),
+            new Claim(ClaimTypes.Role, role),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
 

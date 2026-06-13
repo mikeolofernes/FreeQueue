@@ -1,16 +1,30 @@
 import { useState, useEffect } from 'react'
-import { adminAuth, adminApi } from '../api'
+import { api, adminAuth, adminApi } from '../api'
 import type { AdminBranch, AdminAccount } from '../types'
 
+type Mode = 'loading' | 'setup' | 'login' | 'dashboard'
+
 export function AdminPage() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => !!adminAuth.getToken())
-  const [password, setPassword] = useState('')
+  const [mode, setMode] = useState<Mode>('loading')
+
+  // Setup form
+  const [setupBranchId, setSetupBranchId] = useState('')
+  const [setupBranchName, setSetupBranchName] = useState('')
+  const [setupUsername, setSetupUsername] = useState('')
+  const [setupPassword, setSetupPassword] = useState('')
+  const [setupError, setSetupError] = useState('')
+  const [setupLoading, setSetupLoading] = useState(false)
+
+  // Login form
+  const [loginUsername, setLoginUsername] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
 
+  // Dashboard
   const [branches, setBranches] = useState<AdminBranch[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [dashLoading, setDashLoading] = useState(false)
+  const [dashError, setDashError] = useState('')
 
   const [showNewBranch, setShowNewBranch] = useState(false)
   const [newBranchId, setNewBranchId] = useState('')
@@ -18,32 +32,55 @@ export function AdminPage() {
   const [branchError, setBranchError] = useState('')
   const [branchLoading, setBranchLoading] = useState(false)
 
-  // Per-branch: add account form state keyed by branchId
   const [addingAccount, setAddingAccount] = useState<string | null>(null)
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState('staff')
   const [accountError, setAccountError] = useState('')
   const [accountLoading, setAccountLoading] = useState(false)
 
-  // Per-account: reset password
   const [resetting, setResetting] = useState<number | null>(null)
   const [resetPw, setResetPw] = useState('')
   const [resetError, setResetError] = useState('')
   const [resetLoading, setResetLoading] = useState(false)
 
   useEffect(() => {
-    if (isLoggedIn) loadOverview()
-  }, [isLoggedIn])
+    adminApi.needsSetup().then(({ needsSetup }) => {
+      if (needsSetup) {
+        setMode('setup')
+      } else if (adminAuth.getToken()) {
+        setMode('dashboard')
+        loadOverview()
+      } else {
+        setMode('login')
+      }
+    }).catch(() => setMode('login'))
+  }, [])
 
   async function loadOverview() {
-    setLoading(true)
-    setError('')
+    setDashLoading(true)
+    setDashError('')
     try {
       setBranches(await adminApi.getOverview())
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data.')
+      setDashError(err instanceof Error ? err.message : 'Failed to load data.')
     } finally {
-      setLoading(false)
+      setDashLoading(false)
+    }
+  }
+
+  async function handleSetup(e: React.FormEvent) {
+    e.preventDefault()
+    setSetupLoading(true)
+    setSetupError('')
+    try {
+      await adminApi.setup(setupBranchId.trim(), setupBranchName.trim(), setupUsername.trim(), setupPassword)
+      setMode('login')
+      setLoginUsername(setupUsername.trim())
+    } catch (err) {
+      setSetupError(err instanceof Error ? err.message : 'Setup failed.')
+    } finally {
+      setSetupLoading(false)
     }
   }
 
@@ -52,11 +89,15 @@ export function AdminPage() {
     setLoginLoading(true)
     setLoginError('')
     try {
-      const res = await adminApi.login(password)
+      const res = await api.login(loginUsername.trim(), loginPassword)
+      if (res.role !== 'admin') {
+        throw new Error('This account does not have admin access.')
+      }
       adminAuth.setToken(res.token)
-      setIsLoggedIn(true)
-    } catch {
-      setLoginError('Incorrect admin password.')
+      setMode('dashboard')
+      loadOverview()
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Login failed.')
     } finally {
       setLoginLoading(false)
     }
@@ -64,8 +105,10 @@ export function AdminPage() {
 
   function handleLogout() {
     adminAuth.clearToken()
-    setIsLoggedIn(false)
+    setMode('login')
     setBranches([])
+    setLoginUsername('')
+    setLoginPassword('')
   }
 
   async function handleCreateBranch(e: React.FormEvent) {
@@ -73,7 +116,7 @@ export function AdminPage() {
     setBranchLoading(true)
     setBranchError('')
     try {
-      const branch = await adminApi.createBranch(newBranchId.trim(), newBranchName.trim() || newBranchId.trim())
+      const branch = await adminApi.createBranch(newBranchId.trim(), newBranchName.trim())
       setBranches(prev => [...prev, branch].sort((a, b) => a.name.localeCompare(b.name)))
       setNewBranchId('')
       setNewBranchName('')
@@ -89,6 +132,7 @@ export function AdminPage() {
     setAddingAccount(branchId)
     setNewUsername('')
     setNewPassword('')
+    setNewRole('staff')
     setAccountError('')
   }
 
@@ -97,7 +141,7 @@ export function AdminPage() {
     setAccountLoading(true)
     setAccountError('')
     try {
-      const account = await adminApi.createAccount(branchId, newUsername.trim(), newPassword)
+      const account = await adminApi.createAccount(branchId, newUsername.trim(), newPassword, newRole)
       setBranches(prev => prev.map(b =>
         b.id === branchId ? { ...b, accounts: [...b.accounts, account] } : b
       ))
@@ -135,13 +179,92 @@ export function AdminPage() {
       await adminApi.resetPassword(accountId, resetPw)
       setResetting(null)
     } catch (err) {
-      setResetError(err instanceof Error ? err.message : 'Failed to reset password.')
+      setResetError(err instanceof Error ? err.message : 'Failed.')
     } finally {
       setResetLoading(false)
     }
   }
 
-  if (!isLoggedIn) {
+  // ── Loading ───────────────────────────────────────────────────────────────
+  if (mode === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-gray-800 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  // ── First-time Setup ──────────────────────────────────────────────────────
+  if (mode === 'setup') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center text-white font-black text-lg">Q</div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">QueueFree</h1>
+              <p className="text-xs text-gray-400">Initial Setup</p>
+            </div>
+          </div>
+          <p className="text-sm text-gray-500 mb-6">Create your first branch and admin account to get started.</p>
+          <form onSubmit={handleSetup} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Branch ID</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                placeholder="e.g. clinic-01"
+                value={setupBranchId}
+                onChange={e => setSetupBranchId(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Branch Name</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                placeholder="e.g. Main Clinic"
+                value={setupBranchName}
+                onChange={e => setSetupBranchName(e.target.value)}
+              />
+            </div>
+            <div className="border-t border-gray-100 pt-4">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Admin Username</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                placeholder="admin"
+                value={setupUsername}
+                onChange={e => setSetupUsername(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Admin Password</label>
+              <input
+                type="password"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                placeholder="••••••••"
+                value={setupPassword}
+                onChange={e => setSetupPassword(e.target.value)}
+                required
+              />
+            </div>
+            {setupError && <p className="text-red-500 text-sm">{setupError}</p>}
+            <button
+              type="submit"
+              disabled={setupLoading || !setupBranchId.trim() || !setupUsername.trim() || !setupPassword}
+              className="w-full py-3 bg-gray-800 hover:bg-gray-900 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors"
+            >
+              {setupLoading ? 'Creating…' : 'Create & Continue'}
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Login ─────────────────────────────────────────────────────────────────
+  if (mode === 'login') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
@@ -149,26 +272,36 @@ export function AdminPage() {
             <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center text-white font-black text-lg">Q</div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">QueueFree</h1>
-              <p className="text-xs text-gray-400">Super Admin</p>
+              <p className="text-xs text-gray-400">Admin access</p>
             </div>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Admin Password</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-gray-800"
+                placeholder="admin"
+                value={loginUsername}
+                onChange={e => setLoginUsername(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <input
                 type="password"
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-gray-800"
                 placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
+                value={loginPassword}
+                onChange={e => setLoginPassword(e.target.value)}
                 required
-                autoFocus
               />
             </div>
             {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
             <button
               type="submit"
-              disabled={loginLoading || !password}
+              disabled={loginLoading || !loginUsername.trim() || !loginPassword}
               className="w-full py-3 bg-gray-800 hover:bg-gray-900 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors"
             >
               {loginLoading ? '…' : 'Login'}
@@ -179,6 +312,7 @@ export function AdminPage() {
     )
   }
 
+  // ── Dashboard ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
@@ -192,7 +326,6 @@ export function AdminPage() {
       </header>
 
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        {/* New Branch */}
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-800">Branches</h2>
           <button
@@ -211,7 +344,7 @@ export function AdminPage() {
                 <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Branch ID</label>
                 <input
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
-                  placeholder="e.g. clinic-01"
+                  placeholder="e.g. clinic-02"
                   value={newBranchId}
                   onChange={e => setNewBranchId(e.target.value)}
                   required
@@ -222,7 +355,7 @@ export function AdminPage() {
                 <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Branch Name</label>
                 <input
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
-                  placeholder="e.g. Main Clinic"
+                  placeholder="e.g. Branch 2"
                   value={newBranchName}
                   onChange={e => setNewBranchName(e.target.value)}
                 />
@@ -239,15 +372,13 @@ export function AdminPage() {
           </form>
         )}
 
-        {loading && (
+        {dashLoading && (
           <div className="flex justify-center py-12">
             <div className="w-8 h-8 border-4 border-gray-800 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
-
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-
-        {!loading && branches.length === 0 && !error && (
+        {dashError && <p className="text-red-500 text-sm">{dashError}</p>}
+        {!dashLoading && branches.length === 0 && !dashError && (
           <p className="text-gray-400 text-sm text-center py-8">No branches yet. Create one above.</p>
         )}
 
@@ -269,11 +400,11 @@ export function AdminPage() {
                 {branch.accounts.map(account => (
                   <div key={account.id}>
                     {resetting === account.id ? (
-                      <form onSubmit={e => handleResetPassword(e, account.id)} className="flex items-center gap-2">
+                      <form onSubmit={e => handleResetPassword(e, account.id)} className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm text-gray-700 font-medium w-28 shrink-0">{account.username}</span>
                         <input
                           type="password"
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                          className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
                           placeholder="New password"
                           value={resetPw}
                           onChange={e => setResetPw(e.target.value)}
@@ -287,30 +418,19 @@ export function AdminPage() {
                         >
                           {resetLoading ? '…' : 'Save'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setResetting(null)}
-                          className="px-2 py-1.5 text-gray-400 hover:text-gray-600 text-xs rounded-lg transition-colors"
-                        >
-                          ✕
-                        </button>
-                        {resetError && <p className="text-red-500 text-xs">{resetError}</p>}
+                        <button type="button" onClick={() => setResetting(null)} className="px-2 py-1.5 text-gray-400 hover:text-gray-600 text-xs transition-colors">✕</button>
+                        {resetError && <p className="text-red-500 text-xs w-full">{resetError}</p>}
                       </form>
                     ) : (
                       <div className="flex items-center gap-2">
                         <span className="flex-1 text-sm text-gray-700 font-medium">{account.username}</span>
-                        <button
-                          onClick={() => openResetPassword(account)}
-                          className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded transition-colors"
-                          title="Reset password"
-                        >
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${account.role === 'admin' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                          {account.role}
+                        </span>
+                        <button onClick={() => openResetPassword(account)} className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded transition-colors">
                           Reset pw
                         </button>
-                        <button
-                          onClick={() => handleDeleteAccount(branch.id, account.id)}
-                          className="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded transition-colors"
-                          title="Delete account"
-                        >
+                        <button onClick={() => handleDeleteAccount(branch.id, account.id)} className="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded transition-colors">
                           ✕
                         </button>
                       </div>
@@ -346,6 +466,17 @@ export function AdminPage() {
                       />
                     </div>
                   </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Role</label>
+                    <select
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800 bg-white"
+                      value={newRole}
+                      onChange={e => setNewRole(e.target.value)}
+                    >
+                      <option value="staff">Staff</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
                   {accountError && <p className="text-red-500 text-xs">{accountError}</p>}
                   <div className="flex gap-2">
                     <button
@@ -355,20 +486,13 @@ export function AdminPage() {
                     >
                       {accountLoading ? 'Creating…' : 'Create Account'}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setAddingAccount(null)}
-                      className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm rounded-xl transition-colors"
-                    >
+                    <button type="button" onClick={() => setAddingAccount(null)} className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm rounded-xl transition-colors">
                       Cancel
                     </button>
                   </div>
                 </form>
               ) : (
-                <button
-                  onClick={() => openAddAccount(branch.id)}
-                  className="text-sm text-gray-500 hover:text-gray-800 font-medium transition-colors"
-                >
+                <button onClick={() => openAddAccount(branch.id)} className="text-sm text-gray-500 hover:text-gray-800 font-medium transition-colors">
                   + Add Account
                 </button>
               )}

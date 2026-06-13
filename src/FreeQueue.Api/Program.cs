@@ -41,10 +41,10 @@ builder.Services.AddRateLimiter(options =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
-    options.AddPolicy("admin-login", context =>
+    options.AddPolicy("auth-login", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(15) }));
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(5) }));
 });
 
 // ── JWT Authentication ────────────────────────────────────────────────────────
@@ -159,6 +159,9 @@ using (var scope = app.Services.CreateScope())
                 FOREIGN KEY ("BranchId") REFERENCES "Branches"("Id") ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS "IX_BranchServices_BranchId" ON "BranchServices"("BranchId");
+
+        -- Staff account roles
+        ALTER TABLE "StaffAccounts" ADD COLUMN IF NOT EXISTS "Role" VARCHAR(20) NOT NULL DEFAULT 'staff';
         """);
 }
 

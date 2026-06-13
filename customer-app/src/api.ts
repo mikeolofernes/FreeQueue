@@ -77,7 +77,7 @@ export const api = {
 
   // Staff (authenticated)
   login: (username: string, password: string) =>
-    request<{ token: string; branchId: string; username: string }>('/api/auth/login', {
+    request<{ token: string; branchId: string; username: string; role: string }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     }),
@@ -167,10 +167,13 @@ async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const adminApi = {
-  login: (password: string) =>
-    request<{ token: string }>('/api/admin/login', {
+  needsSetup: () =>
+    request<{ needsSetup: boolean }>('/api/admin/needs-setup'),
+
+  setup: (branchId: string, branchName: string, username: string, password: string) =>
+    request<void>('/api/admin/setup', {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ branchId, branchName, username, password }),
     }),
 
   getOverview: () =>
@@ -182,10 +185,10 @@ export const adminApi = {
       body: JSON.stringify({ id, name }),
     }),
 
-  createAccount: (branchId: string, username: string, password: string) =>
+  createAccount: (branchId: string, username: string, password: string, role: string = 'staff') =>
     adminRequest<AdminAccount>('/api/admin/accounts', {
       method: 'POST',
-      body: JSON.stringify({ branchId, username, password }),
+      body: JSON.stringify({ branchId, username, password, role }),
     }),
 
   resetPassword: (accountId: number, password: string) =>

@@ -53,6 +53,7 @@ export interface BranchService {
 export interface AdminAccount {
   id: number
   username: string
+  role: string
   createdAt: string
 }
 
