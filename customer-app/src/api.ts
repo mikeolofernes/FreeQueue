@@ -1,12 +1,19 @@
-import type { BranchResponse, TicketResponse, QueueStatus, UndoResponse, BranchService } from './types'
+import type { BranchResponse, TicketResponse, QueueStatus, UndoResponse, BranchService, AdminBranch, AdminAccount } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'fq_staff_token'
+const ADMIN_TOKEN_KEY = 'fq_admin_token'
 
 export const auth = {
   getToken: () => localStorage.getItem(TOKEN_KEY),
   setToken: (t: string) => localStorage.setItem(TOKEN_KEY, t),
   clearToken: () => localStorage.removeItem(TOKEN_KEY),
+}
+
+export const adminAuth = {
+  getToken: () => localStorage.getItem(ADMIN_TOKEN_KEY),
+  setToken: (t: string) => localStorage.setItem(ADMIN_TOKEN_KEY, t),
+  clearToken: () => localStorage.removeItem(ADMIN_TOKEN_KEY),
 }
 
 async function request<T>(path: string, init?: RequestInit, withAuth = false): Promise<T> {
@@ -136,4 +143,57 @@ export const api = {
     request<void>(`/api/branches/${encodeURIComponent(branchId)}/services/${serviceId}`, {
       method: 'DELETE',
     }, true),
+}
+
+async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = adminAuth.getToken()
+  const res = await fetch(`${BASE}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...init,
+  })
+  if (res.status === 401) {
+    adminAuth.clearToken()
+    window.location.href = '/admin'
+  }
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `HTTP ${res.status}`)
+  }
+  const text = await res.text()
+  return (text ? JSON.parse(text) : null) as T
+}
+
+export const adminApi = {
+  login: (password: string) =>
+    request<{ token: string }>('/api/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+
+  getOverview: () =>
+    adminRequest<AdminBranch[]>('/api/admin/overview'),
+
+  createBranch: (id: string, name: string) =>
+    adminRequest<AdminBranch>('/api/admin/branches', {
+      method: 'POST',
+      body: JSON.stringify({ id, name }),
+    }),
+
+  createAccount: (branchId: string, username: string, password: string) =>
+    adminRequest<AdminAccount>('/api/admin/accounts', {
+      method: 'POST',
+      body: JSON.stringify({ branchId, username, password }),
+    }),
+
+  resetPassword: (accountId: number, password: string) =>
+    adminRequest<void>(`/api/admin/accounts/${accountId}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password }),
+    }),
+
+  deleteAccount: (accountId: number) =>
+    adminRequest<void>(`/api/admin/accounts/${accountId}`, { method: 'DELETE' }),
 }

@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { KioskPage } from './pages/KioskPage'
 import { TicketPage } from './pages/TicketPage'
 import { DisplayPage } from './pages/DisplayPage'
+import { AdminPage } from './pages/AdminPage'
 import StaffApp from './staff/StaffApp'
 import type { BranchResponse } from './types'
 
@@ -55,6 +56,7 @@ export default function App() {
       <Route path="/display" element={<DisplayPage />} />
       <Route path="/ticket/:ticketId" element={<TicketPage />} />
       <Route path="/staff/*" element={<StaffApp />} />
+      <Route path="/admin" element={<AdminPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

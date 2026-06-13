@@ -49,3 +49,16 @@ export interface BranchService {
   name: string
   sortOrder: number
 }
+
+export interface AdminAccount {
+  id: number
+  username: string
+  createdAt: string
+}
+
+export interface AdminBranch {
+  id: string
+  name: string
+  category: string | null
+  accounts: AdminAccount[]
+}
