@@ -1,12 +1,19 @@
-import type { BranchResponse, TicketResponse, QueueStatus, UndoResponse } from './types'
+import type { BranchResponse, TicketResponse, QueueStatus, UndoResponse, BranchService, AdminBranch, AdminAccount, AnalyticsData, Appointment } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'fq_staff_token'
+const ADMIN_TOKEN_KEY = 'fq_admin_token'
 
 export const auth = {
   getToken: () => localStorage.getItem(TOKEN_KEY),
   setToken: (t: string) => localStorage.setItem(TOKEN_KEY, t),
   clearToken: () => localStorage.removeItem(TOKEN_KEY),
+}
+
+export const adminAuth = {
+  getToken: () => localStorage.getItem(ADMIN_TOKEN_KEY),
+  setToken: (t: string) => localStorage.setItem(ADMIN_TOKEN_KEY, t),
+  clearToken: () => localStorage.removeItem(ADMIN_TOKEN_KEY),
 }
 
 async function request<T>(path: string, init?: RequestInit, withAuth = false): Promise<T> {
@@ -21,6 +28,27 @@ async function request<T>(path: string, init?: RequestInit, withAuth = false): P
   if (withAuth && res.status === 401) {
     auth.clearToken()
     window.location.reload()
+  }
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `HTTP ${res.status}`)
+  }
+  const text = await res.text()
+  return (text ? JSON.parse(text) : null) as T
+}
+
+async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = adminAuth.getToken()
+  const res = await fetch(`${BASE}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...init,
+  })
+  if (res.status === 401) {
+    adminAuth.clearToken()
+    window.location.href = '/admin'
   }
   if (!res.ok) {
     const text = await res.text()
@@ -65,11 +93,30 @@ export const api = {
   lookupCustomer: (phone: string) =>
     request<{ name: string | null }>(`/api/queue/customer/lookup?phone=${encodeURIComponent(phone)}`),
 
-  // Staff (authenticated)
-  login: (branchId: string, username: string, password: string) =>
-    request<{ token: string; branchId: string; username: string }>('/api/auth/login', {
+  getServices: (branchId: string) =>
+    request<BranchService[]>(`/api/branches/${encodeURIComponent(branchId)}/services`),
+
+  verifyKioskPin: (branchId: string, pin: string) =>
+    request(`/api/branches/${encodeURIComponent(branchId)}/kiosk-verify`, {
       method: 'POST',
-      body: JSON.stringify({ branchId, username, password }),
+      body: JSON.stringify({ pin }),
+    }),
+
+  // Appointments (public)
+  bookAppointment: (branchId: string, serviceType: string, customerName: string, phone: string | null, scheduledAt: string, notes?: string) =>
+    request<Appointment>(`/api/appointments/${encodeURIComponent(branchId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ serviceType, customerName, phone, scheduledAt, notes }),
+    }),
+
+  getUpcomingAppointments: (branchId: string) =>
+    request<Appointment[]>(`/api/appointments/${encodeURIComponent(branchId)}`),
+
+  // Staff (authenticated)
+  login: (username: string, password: string) =>
+    request<{ token: string; branchId: string; username: string; role: string }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
     }),
 
   getStatus: (branchId: string) =>
@@ -84,26 +131,26 @@ export const api = {
       body: JSON.stringify({ branchId, ticketNumber, serviceType, durationSecs }),
     }, true),
 
-  addWalkIn: (branchId: string, serviceType: string, customerName?: string) =>
+  addWalkIn: (branchId: string, serviceType: string, customerName?: string, priority = false) =>
     request<TicketResponse>('/api/queue/walkin', {
       method: 'POST',
-      body: JSON.stringify({ branchId, serviceType, customerName }),
+      body: JSON.stringify({ branchId, serviceType, customerName, priority }),
     }, true),
 
   undo: (branchId: string) =>
     request<UndoResponse>(`/api/queue/${encodeURIComponent(branchId)}/undo`, { method: 'POST' }, true),
 
-  createBranch: (id: string, name: string) =>
-    request('/api/branches', {
-      method: 'POST',
-      body: JSON.stringify({ id, name, maxCapacity: 50, graceMinutes: 15 }),
-    }),
+  noShow: (ticketId: number) =>
+    request<void>(`/api/queue/ticket/${ticketId}/no-show`, { method: 'POST' }, true),
 
-  setupStaffAccount: (branchId: string, username: string, password: string) =>
-    request('/api/auth/setup', {
-      method: 'POST',
-      body: JSON.stringify({ branchId, username, password }),
-    }),
+  transferTicket: (ticketId: number, newServiceType: string) =>
+    request<TicketResponse>(`/api/queue/ticket/${ticketId}/transfer`, {
+      method: 'PUT',
+      body: JSON.stringify({ newServiceType }),
+    }, true),
+
+  toggleQueueOpen: (branchId: string) =>
+    request<{ isOpen: boolean }>(`/api/branches/${encodeURIComponent(branchId)}/toggle-open`, { method: 'POST' }, true),
 
   setKioskPin: (branchId: string, pin: string | null) =>
     request(`/api/branches/${encodeURIComponent(branchId)}/kiosk-pin`, {
@@ -111,9 +158,67 @@ export const api = {
       body: JSON.stringify({ pin }),
     }, true),
 
-  verifyKioskPin: (branchId: string, pin: string) =>
-    request(`/api/branches/${encodeURIComponent(branchId)}/kiosk-verify`, {
+  addService: (branchId: string, name: string) =>
+    request<BranchService>(`/api/branches/${encodeURIComponent(branchId)}/services`, {
       method: 'POST',
-      body: JSON.stringify({ pin }),
+      body: JSON.stringify({ name }),
+    }, true),
+
+  updateService: (branchId: string, serviceId: number, name: string) =>
+    request<BranchService>(`/api/branches/${encodeURIComponent(branchId)}/services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    }, true),
+
+  deleteService: (branchId: string, serviceId: number) =>
+    request<void>(`/api/branches/${encodeURIComponent(branchId)}/services/${serviceId}`, {
+      method: 'DELETE',
+    }, true),
+
+  getAnalytics: (branchId: string, days = 7) =>
+    request<AnalyticsData>(`/api/analytics/${encodeURIComponent(branchId)}?days=${days}`, undefined, true),
+
+  getAppointments: (branchId: string) =>
+    request<Appointment[]>(`/api/appointments/${encodeURIComponent(branchId)}`, undefined, true),
+
+  updateAppointmentStatus: (branchId: string, id: number, status: string) =>
+    request<Appointment>(`/api/appointments/${encodeURIComponent(branchId)}/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    }, true),
+}
+
+export const adminApi = {
+  needsSetup: () =>
+    request<{ needsSetup: boolean }>('/api/admin/needs-setup'),
+
+  setup: (branchId: string, branchName: string, username: string, password: string) =>
+    request<void>('/api/admin/setup', {
+      method: 'POST',
+      body: JSON.stringify({ branchId, branchName, username, password }),
     }),
+
+  getOverview: () =>
+    adminRequest<AdminBranch[]>('/api/admin/overview'),
+
+  createBranch: (id: string, name: string) =>
+    adminRequest<AdminBranch>('/api/admin/branches', {
+      method: 'POST',
+      body: JSON.stringify({ id, name }),
+    }),
+
+  createAccount: (branchId: string, username: string, password: string, role: string = 'staff') =>
+    adminRequest<AdminAccount>('/api/admin/accounts', {
+      method: 'POST',
+      body: JSON.stringify({ branchId, username, password, role }),
+    }),
+
+  resetPassword: (accountId: number, password: string) =>
+    adminRequest<void>(`/api/admin/accounts/${accountId}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password }),
+    }),
+
+  deleteAccount: (accountId: number) =>
+    adminRequest<void>(`/api/admin/accounts/${accountId}`, { method: 'DELETE' }),
 }

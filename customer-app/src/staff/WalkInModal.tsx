@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 interface Props {
   services: string[]
-  onConfirm: (serviceType: string, customerName?: string) => void
+  onConfirm: (serviceType: string, customerName?: string, priority?: boolean) => void
   onCancel: () => void
 }
 
@@ -11,6 +11,7 @@ export function WalkInModal({ services, onConfirm, onCancel }: Props) {
   const [serviceType, setServiceType] = useState(services[0] ?? 'Other')
   const [custom, setCustom] = useState('')
   const [name, setName] = useState('')
+  const [priority, setPriority] = useState(false)
 
   const finalService = serviceType === 'Other' ? custom : serviceType
 
@@ -48,7 +49,9 @@ export function WalkInModal({ services, onConfirm, onCancel }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Customer name <span className="text-gray-400">(optional)</span></label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Customer name <span className="text-gray-400">(optional)</span>
+          </label>
           <input
             className="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-brand"
             placeholder="Walk-in"
@@ -56,6 +59,19 @@ export function WalkInModal({ services, onConfirm, onCancel }: Props) {
             onChange={e => setName(e.target.value)}
           />
         </div>
+
+        {/* Priority toggle */}
+        <button
+          type="button"
+          onClick={() => setPriority(p => !p)}
+          className={`w-full py-2.5 rounded-xl border-2 font-semibold text-sm transition-colors ${
+            priority
+              ? 'border-amber-400 bg-amber-50 text-amber-700'
+              : 'border-gray-200 text-gray-500 hover:border-gray-300'
+          }`}
+        >
+          {priority ? '⚡ Priority / Fast-track' : '⚡ Mark as Priority'}
+        </button>
 
         <div className="flex gap-3 pt-2">
           <button
@@ -65,7 +81,7 @@ export function WalkInModal({ services, onConfirm, onCancel }: Props) {
             Cancel
           </button>
           <button
-            onClick={() => onConfirm(finalService, name || undefined)}
+            onClick={() => onConfirm(finalService, name || undefined, priority)}
             disabled={!finalService.trim()}
             className="flex-1 py-3 rounded-xl bg-teal-brand hover:bg-teal-dark disabled:opacity-40 text-white font-semibold transition-colors"
           >

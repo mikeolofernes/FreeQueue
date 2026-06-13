@@ -4,27 +4,29 @@ import { useQueueHub } from './useQueueHub'
 import { LoginScreen } from './LoginScreen'
 import { WalkInModal } from './WalkInModal'
 import { ElapsedTimer } from './ElapsedTimer'
-import { getServiceTypes } from './serviceTypes'
-import type { QueueStatus } from '../types'
+import type { QueueStatus, BranchService, AnalyticsData } from '../types'
 
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
-const BRANCH_CATEGORY_KEY = 'fq_branch_category'
+
+type Panel = 'none' | 'pin' | 'services' | 'analytics' | 'appointments'
 
 export default function StaffApp() {
   const [branchId, setBranchId] = useState(() => localStorage.getItem(BRANCH_KEY) ?? '')
   const [branchName, setBranchName] = useState(() => localStorage.getItem(BRANCH_NAME_KEY) ?? '')
-  const [branchServices, setBranchServices] = useState(() =>
-    getServiceTypes(localStorage.getItem(BRANCH_CATEGORY_KEY)))
+  const [branchServices, setBranchServices] = useState<BranchService[]>([])
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!auth.getToken())
   const [status, setStatus] = useState<QueueStatus | null>(null)
   const [connected, setConnected] = useState(false)
   const [servingStartedAt, setServingStartedAt] = useState<Date | null>(null)
   const [showWalkIn, setShowWalkIn] = useState(false)
-  const [showPinSettings, setShowPinSettings] = useState(false)
+  const [activePanel, setActivePanel] = useState<Panel>('none')
   const [pinInput, setPinInput] = useState('')
+  const [newService, setNewService] = useState('')
+  const [editingService, setEditingService] = useState<{ id: number; name: string } | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [advancing, setAdvancing] = useState(false)
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const prevTicket = useRef<number | null>(null)
 
   const showToast = useCallback((msg: string, type: 'ok' | 'err' = 'ok') => {
@@ -37,6 +39,10 @@ export default function StaffApp() {
     try { setStatus(await api.getStatus(branchId)) } catch { /* keep stale */ }
   }, [branchId])
 
+  const loadServices = useCallback(async (id: string) => {
+    try { setBranchServices(await api.getServices(id)) } catch { /* keep stale */ }
+  }, [])
+
   useEffect(() => {
     if (status?.currentTicketNumber !== prevTicket.current) {
       prevTicket.current = status?.currentTicketNumber ?? null
@@ -44,7 +50,12 @@ export default function StaffApp() {
     }
   }, [status?.currentTicketNumber])
 
-  useEffect(() => { if (branchId && isLoggedIn) refreshStatus() }, [branchId, isLoggedIn, refreshStatus])
+  useEffect(() => {
+    if (branchId && isLoggedIn) {
+      refreshStatus()
+      loadServices(branchId)
+    }
+  }, [branchId, isLoggedIn, refreshStatus, loadServices])
 
   useQueueHub({
     branchId,
@@ -53,15 +64,13 @@ export default function StaffApp() {
     onDisconnected: () => setConnected(false),
   })
 
-  function handleLogin(id: string, name: string) {
+  function handleLogin(id: string) {
     localStorage.setItem(BRANCH_KEY, id)
-    localStorage.setItem(BRANCH_NAME_KEY, name)
     setBranchId(id)
-    setBranchName(name)
     setIsLoggedIn(true)
     api.getBranch(id).then(b => {
-      if (b.category) localStorage.setItem(BRANCH_CATEGORY_KEY, b.category)
-      setBranchServices(getServiceTypes(b.category))
+      localStorage.setItem(BRANCH_NAME_KEY, b.name)
+      setBranchName(b.name)
     }).catch(() => {})
   }
 
@@ -69,12 +78,12 @@ export default function StaffApp() {
     auth.clearToken()
     localStorage.removeItem(BRANCH_KEY)
     localStorage.removeItem(BRANCH_NAME_KEY)
-    localStorage.removeItem(BRANCH_CATEGORY_KEY)
     setBranchId('')
     setBranchName('')
-    setBranchServices(getServiceTypes())
+    setBranchServices([])
     setIsLoggedIn(false)
     setStatus(null)
+    setActivePanel('none')
   }
 
   async function handleAdvance() {
@@ -98,11 +107,23 @@ export default function StaffApp() {
     }
   }
 
-  async function handleWalkIn(serviceType: string, customerName?: string) {
+  async function handleNoShow() {
+    const ticketId = status?.currentTicketId
+    if (!ticketId) return
+    try {
+      await api.noShow(ticketId)
+      showToast('No-show recorded — called next')
+      refreshStatus()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed', 'err')
+    }
+  }
+
+  async function handleWalkIn(serviceType: string, customerName?: string, priority = false) {
     setShowWalkIn(false)
     try {
-      const ticket = await api.addWalkIn(branchId, serviceType, customerName)
-      showToast(`✓ Walk-in added — Ticket #${ticket.ticketNumber}`)
+      const ticket = await api.addWalkIn(branchId, serviceType, customerName, priority)
+      showToast(`✓ ${priority ? '⚡ Priority ' : ''}Walk-in added — Ticket #${ticket.ticketNumber}`)
       refreshStatus()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to add walk-in', 'err')
@@ -119,22 +140,80 @@ export default function StaffApp() {
     }
   }
 
+  async function handleToggleOpen() {
+    try {
+      const res = await api.toggleQueueOpen(branchId)
+      setStatus(s => s ? { ...s, isOpen: res.isOpen } : s)
+      showToast(res.isOpen ? '🟢 Queue opened' : '🔴 Queue closed')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed', 'err')
+    }
+  }
+
   async function handleSetKioskPin(e: React.FormEvent) {
     e.preventDefault()
     try {
       await api.setKioskPin(branchId, pinInput.trim() || null)
       showToast(pinInput.trim() ? '🔒 Kiosk PIN set' : '🔓 Kiosk PIN cleared')
       setPinInput('')
-      setShowPinSettings(false)
+      setActivePanel('none')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to set PIN', 'err')
     }
+  }
+
+  async function handleAddService(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newService.trim()) return
+    try {
+      const added = await api.addService(branchId, newService.trim())
+      setBranchServices(prev => [...prev, added])
+      setNewService('')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to add service', 'err')
+    }
+  }
+
+  async function handleUpdateService(id: number, name: string) {
+    if (!name.trim()) return
+    try {
+      const updated = await api.updateService(branchId, id, name.trim())
+      setBranchServices(prev => prev.map(s => s.id === id ? updated : s))
+      setEditingService(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update service', 'err')
+    }
+  }
+
+  async function handleDeleteService(id: number) {
+    try {
+      await api.deleteService(branchId, id)
+      setBranchServices(prev => prev.filter(s => s.id !== id))
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete service', 'err')
+    }
+  }
+
+  async function handleLoadAnalytics() {
+    try {
+      const data = await api.getAnalytics(branchId)
+      setAnalytics(data)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to load analytics', 'err')
+    }
+  }
+
+  function togglePanel(p: Panel) {
+    if (activePanel === p) { setActivePanel('none'); return }
+    setActivePanel(p)
+    if (p === 'analytics') handleLoadAnalytics()
   }
 
   if (!isLoggedIn) return <LoginScreen onLogin={handleLogin} />
 
   const isServing = status?.currentTicketNumber != null
   const queueEmpty = !isServing && (status?.peopleWaiting ?? 0) === 0
+  const isOpen = status?.isOpen ?? true
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-sm mx-auto">
@@ -159,6 +238,12 @@ export default function StaffApp() {
         </div>
       )}
 
+      {!isOpen && (
+        <div className="bg-red-50 border-b border-red-100 px-5 py-2 text-center">
+          <span className="text-red-600 text-sm font-medium">Queue is closed — customers cannot join</span>
+        </div>
+      )}
+
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 gap-6">
         {queueEmpty ? (
           <div className="text-center space-y-2">
@@ -171,6 +256,9 @@ export default function StaffApp() {
             <p className="text-xs font-semibold tracking-widest text-gray-400 uppercase">Now serving</p>
             <div className="text-8xl font-black text-teal-brand leading-none">
               #{status!.currentTicketNumber}
+              {status?.nextTicketNumbers?.[0] != null && (
+                <span className="text-gray-300 text-3xl ml-3">→ #{status.nextTicketNumbers[0]}</span>
+              )}
             </div>
             <p className="text-gray-500 font-medium">{status!.currentServiceType}</p>
           </div>
@@ -185,39 +273,72 @@ export default function StaffApp() {
 
         <button
           onClick={handleAdvance}
-          disabled={advancing || queueEmpty}
+          disabled={advancing || (queueEmpty && !isServing)}
           className="w-full py-6 rounded-2xl bg-teal-brand hover:bg-teal-dark active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xl font-bold shadow-lg transition-all"
         >
           {advancing ? 'Advancing…' : isServing ? '✓  Done — Call Next' : '▶  Call First Customer'}
         </button>
+
+        {/* No-show button */}
+        {isServing && (
+          <button
+            onClick={handleNoShow}
+            className="w-full py-3 rounded-xl border-2 border-red-200 text-red-500 font-semibold hover:bg-red-50 transition-colors text-sm"
+          >
+            ✗ No-show — Skip &amp; Call Next
+          </button>
+        )}
       </div>
 
-      <div className="bg-white border-t border-gray-100 px-5 py-4 flex gap-3">
+      {/* Bottom bar */}
+      <div className="bg-white border-t border-gray-100 px-3 py-3 flex gap-2">
         <button
           onClick={() => setShowWalkIn(true)}
-          className="flex-1 py-3 rounded-xl border-2 border-teal-brand text-teal-brand font-semibold hover:bg-teal-brand hover:text-white transition-colors"
+          className="flex-1 py-3 rounded-xl border-2 border-teal-brand text-teal-brand font-semibold hover:bg-teal-brand hover:text-white transition-colors text-sm"
         >
           + Walk-in
         </button>
         <button
           onClick={handleUndo}
-          className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition-colors"
+          className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition-colors text-sm"
         >
           ↩ Undo
         </button>
         <button
-          onClick={() => setShowPinSettings(p => !p)}
-          className="py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition-colors"
+          onClick={handleToggleOpen}
+          className={`py-3 px-3 rounded-xl border-2 font-semibold transition-colors text-sm ${isOpen ? 'border-green-200 text-green-600 hover:bg-green-50' : 'border-red-200 text-red-500 hover:bg-red-50'}`}
+          title={isOpen ? 'Close Queue' : 'Open Queue'}
+        >
+          {isOpen ? '🟢' : '🔴'}
+        </button>
+        <button
+          onClick={() => togglePanel('pin')}
+          className={`py-3 px-3 rounded-xl border-2 font-semibold transition-colors text-sm ${activePanel === 'pin' ? 'border-teal-brand bg-teal-brand text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
           title="Kiosk PIN"
         >
           🔒
         </button>
+        <button
+          onClick={() => togglePanel('services')}
+          className={`py-3 px-3 rounded-xl border-2 font-semibold transition-colors text-sm ${activePanel === 'services' ? 'border-teal-brand bg-teal-brand text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          title="Manage Services"
+        >
+          ⚙
+        </button>
+        <button
+          onClick={() => togglePanel('analytics')}
+          className={`py-3 px-3 rounded-xl border-2 font-semibold transition-colors text-sm ${activePanel === 'analytics' ? 'border-teal-brand bg-teal-brand text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          title="Analytics"
+        >
+          📊
+        </button>
       </div>
 
-      {showPinSettings && (
+      {/* PIN panel */}
+      {activePanel === 'pin' && (
         <div className="bg-white border-t border-gray-200 px-5 py-4">
           <p className="text-sm font-semibold text-gray-700 mb-2">Kiosk PIN</p>
-          <p className="text-xs text-gray-400 mb-3">Set a PIN so only staff can unlock the kiosk. Leave blank to remove the PIN.</p>
+          <p className="text-xs text-gray-400 mb-3">Set a PIN so only staff can unlock the kiosk. Leave blank to remove.</p>
           <form onSubmit={handleSetKioskPin} className="flex gap-2">
             <input
               type="password"
@@ -227,17 +348,120 @@ export default function StaffApp() {
               value={pinInput}
               onChange={e => setPinInput(e.target.value)}
             />
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-xl bg-teal-brand text-white font-semibold hover:bg-teal-dark transition-colors"
-            >
+            <button type="submit" className="px-4 py-2 rounded-xl bg-teal-brand text-white font-semibold hover:bg-teal-dark transition-colors">
               Save
             </button>
           </form>
         </div>
       )}
 
-      {showWalkIn && <WalkInModal services={branchServices} onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
+      {/* Services panel */}
+      {activePanel === 'services' && (
+        <div className="bg-white border-t border-gray-200 px-5 py-4">
+          <p className="text-sm font-semibold text-gray-700 mb-3">Services Offered</p>
+          <div className="space-y-2 mb-3 max-h-52 overflow-y-auto">
+            {branchServices.length === 0 && (
+              <p className="text-xs text-gray-400 italic">No services yet. Add one below.</p>
+            )}
+            {branchServices.map(s => (
+              <div key={s.id} className="flex items-center gap-2">
+                {editingService?.id === s.id ? (
+                  <>
+                    <input
+                      className="flex-1 border-2 border-teal-brand rounded-lg px-3 py-1.5 text-sm outline-none"
+                      value={editingService.name}
+                      onChange={e => setEditingService({ id: s.id, name: e.target.value })}
+                      onKeyDown={e => { if (e.key === 'Enter') handleUpdateService(s.id, editingService.name) }}
+                      autoFocus
+                    />
+                    <button onClick={() => handleUpdateService(s.id, editingService.name)} className="px-3 py-1.5 bg-teal-brand text-white text-xs rounded-lg">Save</button>
+                    <button onClick={() => setEditingService(null)} className="px-2 py-1.5 text-gray-400 text-xs rounded-lg">✕</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-gray-700 py-1">{s.name}</span>
+                    <button onClick={() => setEditingService({ id: s.id, name: s.name })} className="text-gray-400 hover:text-teal-brand p-1 text-sm transition-colors" title="Edit">✎</button>
+                    <button onClick={() => handleDeleteService(s.id)} className="text-gray-400 hover:text-red-500 p-1 text-sm transition-colors" title="Delete">✕</button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+          <form onSubmit={handleAddService} className="flex gap-2">
+            <input
+              className="flex-1 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-3 py-2 text-sm outline-none transition-colors"
+              placeholder="New service name"
+              value={newService}
+              onChange={e => setNewService(e.target.value)}
+            />
+            <button type="submit" disabled={!newService.trim()} className="px-4 py-2 rounded-xl bg-teal-brand text-white text-sm font-semibold disabled:opacity-40 hover:bg-teal-dark transition-colors">
+              Add
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Analytics panel */}
+      {activePanel === 'analytics' && (
+        <div className="bg-white border-t border-gray-200 px-5 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-700">Analytics (7 days)</p>
+            <button onClick={handleLoadAnalytics} className="text-xs text-teal-brand hover:text-teal-dark">Refresh</button>
+          </div>
+          {analytics ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <Stat label="Served today" value={analytics.totalServedToday} highlight />
+                <Stat label="Waiting" value={analytics.currentlyWaiting} />
+                <Stat label="Avg wait" value={`${analytics.avgWaitMinutes.toFixed(1)}m`} />
+              </div>
+              {analytics.csatScore > 0 && (
+                <div className="bg-amber-50 rounded-xl px-4 py-3 text-center">
+                  <div className="text-2xl font-black text-amber-600">{(analytics.csatScore).toFixed(1)}/3</div>
+                  <div className="text-xs text-amber-500 mt-0.5">Satisfaction score</div>
+                </div>
+              )}
+              {analytics.serviceBreakdown.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">By Service</p>
+                  <div className="space-y-1.5">
+                    {analytics.serviceBreakdown.slice(0, 5).map(s => (
+                      <div key={s.serviceType} className="flex items-center gap-2 text-sm">
+                        <span className="flex-1 text-gray-700 truncate">{s.serviceType}</span>
+                        <span className="font-bold text-teal-brand">{s.count}</span>
+                        <span className="text-gray-400 text-xs">{(s.avgDurationSecs / 60).toFixed(1)}m avg</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {analytics.hourlyBreakdown.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Peak Hours</p>
+                  <div className="flex gap-1 items-end h-16">
+                    {(() => {
+                      const max = Math.max(...analytics.hourlyBreakdown.map(h => h.count))
+                      return analytics.hourlyBreakdown.map(h => (
+                        <div key={h.hour} className="flex-1 flex flex-col items-center gap-1">
+                          <div
+                            className="w-full bg-teal-brand rounded-t"
+                            style={{ height: `${Math.max(4, (h.count / max) * 48)}px` }}
+                          />
+                          <span className="text-gray-400 text-[9px]">{h.hour}h</span>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-4">Loading analytics…</p>
+          )}
+        </div>
+      )}
+
+      {showWalkIn && <WalkInModal services={branchServices.map(s => s.name)} onConfirm={handleWalkIn} onCancel={() => setShowWalkIn(false)} />}
 
       {toast && (
         <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium z-50 ${
@@ -249,6 +473,7 @@ export default function StaffApp() {
     </div>
   )
 }
+
 
 function Stat({ label, value, highlight }: { label: string; value: string | number; highlight?: boolean }) {
   return (
