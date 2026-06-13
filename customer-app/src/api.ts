@@ -122,13 +122,13 @@ export const api = {
   getStatus: (branchId: string) =>
     request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`, undefined, true),
 
-  callNext: (branchId: string) =>
-    request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/callnext`, { method: 'POST' }, true),
+  callNext: (branchId: string, counterId?: string) =>
+    request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/callnext${counterId ? `?counterId=${encodeURIComponent(counterId)}` : ''}`, { method: 'POST' }, true),
 
-  advance: (branchId: string, ticketNumber: number, serviceType: string, durationSecs: number) =>
+  advance: (branchId: string, ticketNumber: number, serviceType: string, durationSecs: number, counterId?: string) =>
     request<QueueStatus>('/api/queue/advance', {
       method: 'POST',
-      body: JSON.stringify({ branchId, ticketNumber, serviceType, durationSecs }),
+      body: JSON.stringify({ branchId, ticketNumber, serviceType, durationSecs, counterId }),
     }, true),
 
   addWalkIn: (branchId: string, serviceType: string, customerName?: string, priority = false) =>
