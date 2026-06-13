@@ -18,6 +18,7 @@ jobs:
           script: |
             set -e
             cd ~/FreeQueue
+            source .env.production
 
             echo "==> Pulling latest code..."
             git fetch origin main
@@ -28,6 +29,37 @@ jobs:
             npm install --silent
             VITE_API_URL=https://freequeue.duckdns.org npm run build
             cd ..
+
+            echo "==> Running DB migrations..."
+            cat > /tmp/migrate.sql << 'SQLEOF'
+            ALTER TABLE "Branches"      ADD COLUMN IF NOT EXISTS "IsOpen"          BOOLEAN      NOT NULL DEFAULT TRUE;
+            ALTER TABLE "Branches"      ADD COLUMN IF NOT EXISTS "Address"         VARCHAR(300) NULL;
+            ALTER TABLE "Branches"      ADD COLUMN IF NOT EXISTS "City"            VARCHAR(100) NULL;
+            ALTER TABLE "QueueTickets"  ADD COLUMN IF NOT EXISTS "Priority"        BOOLEAN      NOT NULL DEFAULT FALSE;
+            ALTER TABLE "QueueTickets"  ADD COLUMN IF NOT EXISTS "AbandonedAt"     TIMESTAMP    NULL;
+            ALTER TABLE "QueueTickets"  ADD COLUMN IF NOT EXISTS "AbandonPosition" INTEGER      NULL;
+            ALTER TABLE "QueueTickets"  ADD COLUMN IF NOT EXISTS "CounterId"       VARCHAR(50)  NULL;
+            ALTER TABLE "StaffAccounts" ADD COLUMN IF NOT EXISTS "Role"            VARCHAR(20)  NOT NULL DEFAULT 'staff';
+            CREATE TABLE IF NOT EXISTS "Appointments" (
+                "Id"           SERIAL        PRIMARY KEY,
+                "BranchId"     VARCHAR(100)  NOT NULL,
+                "ServiceType"  VARCHAR(100)  NOT NULL,
+                "CustomerName" VARCHAR(200)  NOT NULL,
+                "Phone"        VARCHAR(20)   NULL,
+                "ScheduledAt"  TIMESTAMP     NOT NULL,
+                "Status"       VARCHAR(20)   NOT NULL DEFAULT 'pending',
+                "Notes"        VARCHAR(500)  NULL,
+                "CreatedAt"    TIMESTAMP     NOT NULL DEFAULT NOW(),
+                CONSTRAINT "FK_Appointments_Branches_BranchId"
+                    FOREIGN KEY ("BranchId") REFERENCES "Branches"("Id") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS "IX_Appointments_BranchId_ScheduledAt"
+                ON "Appointments"("BranchId", "ScheduledAt");
+            SQLEOF
+            docker cp /tmp/migrate.sql freequeue-postgres-1:/tmp/migrate.sql
+            docker exec freequeue-postgres-1 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /tmp/migrate.sql
+            docker exec freequeue-postgres-1 rm /tmp/migrate.sql
+            rm /tmp/migrate.sql
 
             echo "==> Restarting API..."
             docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build api
