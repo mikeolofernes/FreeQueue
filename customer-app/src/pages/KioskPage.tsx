@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import * as signalR from '@microsoft/signalr'
 import { api } from '../api'
@@ -195,11 +195,7 @@ export function KioskPage() {
   }
 
   if (!branchId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <p className="text-gray-500 text-center">Add <code>?branch=your-branch-id</code> to the URL.</p>
-      </div>
-    )
+    return <KioskBranchPicker />
   }
 
   // ── Queue Closed ──────────────────────────────────────────────────────────
@@ -455,6 +451,60 @@ function KioskServedScreen({ ticketNumber, onReset }: { ticketNumber: number; on
         Done
       </button>
       <p className="text-teal-light text-lg">Next customer in {countdown}s…</p>
+    </div>
+  )
+}
+
+function KioskBranchPicker() {
+  const navigate = useNavigate()
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch('/api/branches')
+      .then(r => r.json())
+      .then((data: { id: string; name: string }[]) => {
+        if (data.length === 1) {
+          navigate(`/kiosk?branch=${encodeURIComponent(data[0].id)}`, { replace: true })
+        } else {
+          setBranches(data)
+          setLoading(false)
+        }
+      })
+      .catch(() => { setError('Could not load branches.'); setLoading(false) })
+  }, [navigate])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-400 text-xl">Loading…</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <p className="text-red-500 text-center">{error}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8 gap-6">
+      <h1 className="text-3xl font-bold text-gray-800">Select Branch</h1>
+      <div className="flex flex-col gap-4 w-full max-w-sm">
+        {branches.map(b => (
+          <button
+            key={b.id}
+            onClick={() => navigate(`/kiosk?branch=${encodeURIComponent(b.id)}`)}
+            className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xl py-5 px-8 rounded-2xl shadow-md transition-colors"
+          >
+            {b.name}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
