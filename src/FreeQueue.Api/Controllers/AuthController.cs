@@ -1,6 +1,7 @@
 using FreeQueue.Api.Data;
 using FreeQueue.Api.DTOs;
 using FreeQueue.Api.Models;
+using FreeQueue.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
