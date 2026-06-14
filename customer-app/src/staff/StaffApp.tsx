@@ -192,9 +192,10 @@ export default function StaffApp() {
     e.preventDefault()
     try {
       const val = defaultPinInput.trim()
+      const hasPin = !!val
       await api.setDefaultPin(val || null)
-      localStorage.setItem(HAS_DEFAULT_PIN_KEY, String(!!val))
-      setHasDefaultPin(!!val)
+      localStorage.setItem(HAS_DEFAULT_PIN_KEY, String(hasPin))
+      setHasDefaultPin(hasPin)
       setDefaultPinInput('')
       showToast(val ? '🔒 Default PIN saved' : '🔓 Default PIN cleared')
     } catch (err) {

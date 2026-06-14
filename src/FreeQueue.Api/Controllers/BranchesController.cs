@@ -93,7 +93,7 @@ public class BranchesController(AppDbContext db, QueueService queue) : Controlle
         var branch = await db.Branches.FindAsync(id);
         if (branch == null) return NotFound();
         if (branch.KioskPin == null) return Ok(new { valid = true });
-        var isValid = BCrypt.Net.BCrypt.Verify(req.Pin.Trim(), branch.KioskPin);
+        var isValid = KioskPinCrypto.Verify(req.Pin, branch.KioskPin);
         return isValid ? Ok(new { valid = true }) : Unauthorized(new { valid = false });
     }
 
@@ -105,7 +105,7 @@ public class BranchesController(AppDbContext db, QueueService queue) : Controlle
         var branch = await db.Branches.FindAsync(id);
         if (branch == null) return NotFound();
 
-        branch.KioskPin = string.IsNullOrWhiteSpace(req.Pin) ? null : BCrypt.Net.BCrypt.HashPassword(req.Pin.Trim());
+        branch.KioskPin = KioskPinCrypto.Hash(req.Pin);
         await db.SaveChangesAsync();
         return NoContent();
     }

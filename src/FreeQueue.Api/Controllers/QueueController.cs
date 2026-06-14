@@ -23,7 +23,7 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
             var branch = await db.Branches.FindAsync(branchId);
             if (branch == null) return NotFound("Branch not found.");
             if (!branch.IsOpen) return BadRequest("Queue is currently closed.");
-            if (branch.KioskPin != null && !BCrypt.Net.BCrypt.Verify(req.KioskPin?.Trim() ?? "", branch.KioskPin))
+            if (branch.KioskPin != null && !KioskPinCrypto.Verify(req.KioskPin, branch.KioskPin))
                 return Unauthorized("Invalid kiosk PIN.");
 
             return Ok(await queue.JoinQueueAsync(

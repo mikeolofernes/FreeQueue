@@ -49,7 +49,7 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
         var account = await db.StaffAccounts.FirstOrDefaultAsync(a => a.Username == username);
         if (account == null) return NotFound();
 
-        var hashedPin = string.IsNullOrWhiteSpace(req.Pin) ? null : BCrypt.Net.BCrypt.HashPassword(req.Pin.Trim());
+        var hashedPin = KioskPinCrypto.Hash(req.Pin);
         account.DefaultKioskPin = hashedPin;
 
         // Mirror to branch immediately so it takes effect without re-login

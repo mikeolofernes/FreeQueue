@@ -4,6 +4,8 @@ const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'fq_staff_token'
 const ADMIN_TOKEN_KEY = 'fq_admin_token'
 
+const vt = (token?: string) => token ? `?vt=${encodeURIComponent(token)}` : ''
+
 export const auth = {
   getToken: () => localStorage.getItem(TOKEN_KEY),
   setToken: (t: string) => localStorage.setItem(TOKEN_KEY, t),
@@ -72,17 +74,17 @@ export const api = {
   getTicket: (ticketId: number) =>
     request<TicketResponse>(`/api/queue/ticket/${ticketId}`),
 
-  ticketViewed: (ticketId: number, vt?: string) =>
-    request<void>(`/api/queue/ticket/${ticketId}/viewed${vt ? `?vt=${encodeURIComponent(vt)}` : ''}`, { method: 'POST' }),
+  ticketViewed: (ticketId: number, token?: string) =>
+    request<void>(`/api/queue/ticket/${ticketId}/viewed${vt(token)}`, { method: 'POST' }),
 
   skip: (ticketId: number) =>
     request<void>(`/api/queue/ticket/${ticketId}/skip`, { method: 'POST' }, true),
 
-  leave: (ticketId: number, vt?: string) =>
-    request<void>(`/api/queue/ticket/${ticketId}/leave${vt ? `?vt=${encodeURIComponent(vt)}` : ''}`, { method: 'POST' }),
+  leave: (ticketId: number, token?: string) =>
+    request<void>(`/api/queue/ticket/${ticketId}/leave${vt(token)}`, { method: 'POST' }),
 
-  rateTicket: (ticketId: number, rating: number, vt?: string) =>
-    request<void>(`/api/queue/ticket/${ticketId}/rate${vt ? `?vt=${encodeURIComponent(vt)}` : ''}`, {
+  rateTicket: (ticketId: number, rating: number, token?: string) =>
+    request<void>(`/api/queue/ticket/${ticketId}/rate${vt(token)}`, {
       method: 'POST',
       body: JSON.stringify({ rating }),
     }),
