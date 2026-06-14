@@ -20,10 +20,12 @@ public class QueueHub(AppDbContext db) : Hub
 
     public static string BranchGroup(string branchId) => $"branch:{branchId}";
 
-    public async Task JoinTicket(int ticketId)
+    public async Task JoinTicket(int ticketId, string? vt = null)
     {
-        if (!await db.QueueTickets.AnyAsync(t => t.Id == ticketId))
-            throw new HubException("Ticket not found.");
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null) throw new HubException("Ticket not found.");
+        if (ticket.ViewToken != null && ticket.ViewToken != vt)
+            throw new HubException("Unauthorized.");
         await Groups.AddToGroupAsync(Context.ConnectionId, TicketGroup(ticketId));
     }
 

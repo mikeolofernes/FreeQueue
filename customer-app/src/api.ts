@@ -76,7 +76,7 @@ export const api = {
     request<void>(`/api/queue/ticket/${ticketId}/viewed${vt ? `?vt=${encodeURIComponent(vt)}` : ''}`, { method: 'POST' }),
 
   skip: (ticketId: number) =>
-    request<void>(`/api/queue/ticket/${ticketId}/skip`, { method: 'POST' }),
+    request<void>(`/api/queue/ticket/${ticketId}/skip`, { method: 'POST' }, true),
 
   leave: (ticketId: number, vt?: string) =>
     request<void>(`/api/queue/ticket/${ticketId}/leave${vt ? `?vt=${encodeURIComponent(vt)}` : ''}`, { method: 'POST' }),

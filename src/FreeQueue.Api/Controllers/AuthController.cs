@@ -54,7 +54,8 @@ public class AuthController(AppDbContext db, IConfiguration config) : Controller
 
         // Mirror to branch immediately so it takes effect without re-login
         var branch = await db.Branches.FindAsync(account.BranchId);
-        if (branch != null) branch.KioskPin = hashedPin;
+        if (branch == null) return NotFound("Branch not found.");
+        branch.KioskPin = hashedPin;
 
         await db.SaveChangesAsync();
         return NoContent();

@@ -9,6 +9,7 @@ import type { QueueStatus, BranchService, AnalyticsData, Appointment } from '../
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
 const COUNTER_ID_KEY = 'fq_counter_id'
+const HAS_DEFAULT_PIN_KEY = 'fq_has_default_pin'
 
 type Panel = 'none' | 'pin' | 'services' | 'analytics' | 'appointments'
 
@@ -28,7 +29,7 @@ export default function StaffApp() {
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
-  const [hasDefaultPin, setHasDefaultPin] = useState(false)
+  const [hasDefaultPin, setHasDefaultPin] = useState(() => localStorage.getItem(HAS_DEFAULT_PIN_KEY) === 'true')
   const [defaultPinInput, setDefaultPinInput] = useState('')
   const [counterId, setCounterId] = useState(() => localStorage.getItem(COUNTER_ID_KEY) ?? '')
   const [editingCounterId, setEditingCounterId] = useState(false)
@@ -74,6 +75,7 @@ export default function StaffApp() {
 
   function handleLogin(id: string, hasPin?: boolean) {
     localStorage.setItem(BRANCH_KEY, id)
+    localStorage.setItem(HAS_DEFAULT_PIN_KEY, String(!!hasPin))
     setBranchId(id)
     setIsLoggedIn(true)
     setHasDefaultPin(!!hasPin)
@@ -87,6 +89,7 @@ export default function StaffApp() {
     auth.clearToken()
     localStorage.removeItem(BRANCH_KEY)
     localStorage.removeItem(BRANCH_NAME_KEY)
+    localStorage.removeItem(HAS_DEFAULT_PIN_KEY)
     setBranchId('')
     setBranchName('')
     setBranchServices([])
@@ -190,6 +193,7 @@ export default function StaffApp() {
     try {
       const val = defaultPinInput.trim()
       await api.setDefaultPin(val || null)
+      localStorage.setItem(HAS_DEFAULT_PIN_KEY, String(!!val))
       setHasDefaultPin(!!val)
       setDefaultPinInput('')
       showToast(val ? '🔒 Default PIN saved' : '🔓 Default PIN cleared')

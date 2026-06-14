@@ -114,8 +114,8 @@ export function KioskPage() {
       setScreen('scanned')
       setTimeout(reset, 1500)
     })
-    conn.onreconnected(() => { conn.invoke('JoinTicket', ticket.id).catch(() => {}) })
-    conn.start().then(() => conn.invoke('JoinTicket', ticket.id)).catch(() => {})
+    conn.onreconnected(() => { conn.invoke('JoinTicket', ticket.id, ticket.viewToken).catch(() => {}) })
+    conn.start().then(() => conn.invoke('JoinTicket', ticket.id, ticket.viewToken)).catch(() => {})
     connRef.current = conn
     return () => { conn.stop(); connRef.current = null }
   }, [ticket])
