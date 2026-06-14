@@ -313,6 +313,15 @@ export default function StaffApp() {
               {counterId ? `📍 ${counterId}` : '+ Counter'}
             </button>
           )}
+          <a
+            href={`/kiosk?branch=${encodeURIComponent(branchId)}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Open kiosk"
+            className="text-teal-light hover:text-white text-xs transition-colors"
+          >
+            🖥 Kiosk
+          </a>
           <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-gray-400'}`} />
           <button onClick={handleLogout} className="text-teal-light hover:text-white text-xs transition-colors">
             Logout
