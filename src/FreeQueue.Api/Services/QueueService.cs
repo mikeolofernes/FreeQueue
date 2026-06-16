@@ -76,14 +76,23 @@ public class QueueService(
     public async Task<QueueStatusResponse> AdvanceQueueAsync(AdvanceQueueRequest req)
     {
         var now = DateTime.UtcNow;
+        var today = DateOnly.FromDateTime(now);
+
+        // Find the currently-serving ticket by status rather than by number to avoid
+        // ambiguity when multiple groups share the same ticket number on the same day.
+        var current = await db.QueueTickets
+            .Where(t => t.BranchId == req.BranchId
+                     && (t.Status == TicketStatus.Near || t.Status == TicketStatus.Arrived)
+                     && t.QueueDate == today)
+            .FirstOrDefaultAsync();
 
         if (req.DurationSecs > 0)
         {
             db.QueueTransactions.Add(new QueueTransaction
             {
                 BranchId = req.BranchId,
-                ServiceType = req.ServiceType,
-                TicketNumber = req.TicketNumber,
+                ServiceType = current?.ServiceType ?? req.ServiceType,
+                TicketNumber = current?.TicketNumber ?? req.TicketNumber,
                 CalledAt = now.AddSeconds(-req.DurationSecs),
                 ServedAt = now,
                 DurationSecs = req.DurationSecs,
@@ -91,10 +100,6 @@ public class QueueService(
                 HourOfDay = (short)now.Hour,
             });
         }
-
-        var current = await db.QueueTickets
-            .Where(t => t.BranchId == req.BranchId && t.TicketNumber == req.TicketNumber)
-            .FirstOrDefaultAsync();
 
         if (current != null)
         {
@@ -104,7 +109,7 @@ public class QueueService(
         }
 
         await db.SaveChangesAsync();
-        await PushUndoAsync(req.BranchId, req.TicketNumber);
+        await PushUndoAsync(req.BranchId, current?.TicketNumber ?? req.TicketNumber);
 
         var next = await NextActiveTicketAsync(req.BranchId);
         if (next != null)
