@@ -1,12 +1,15 @@
+using FreeQueue.Api.Data;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 
 namespace FreeQueue.Api.Hubs;
 
-public class QueueHub : Hub
+public class QueueHub(AppDbContext db) : Hub
 {
-    // Clients call this to subscribe to a branch's live updates.
     public async Task JoinBranch(string branchId)
     {
+        if (!await db.Branches.AnyAsync(b => b.Id == branchId))
+            throw new HubException("Branch not found.");
         await Groups.AddToGroupAsync(Context.ConnectionId, BranchGroup(branchId));
     }
 
@@ -16,6 +19,17 @@ public class QueueHub : Hub
     }
 
     public static string BranchGroup(string branchId) => $"branch:{branchId}";
+
+    public async Task JoinTicket(int ticketId, string? vt = null)
+    {
+        var ticket = await db.QueueTickets.FindAsync(ticketId);
+        if (ticket == null) throw new HubException("Ticket not found.");
+        if (ticket.ViewToken != null && ticket.ViewToken != vt)
+            throw new HubException("Unauthorized.");
+        await Groups.AddToGroupAsync(Context.ConnectionId, TicketGroup(ticketId));
+    }
+
+    public static string TicketGroup(int ticketId) => $"ticket:{ticketId}";
 }
 
 // Events pushed to clients:

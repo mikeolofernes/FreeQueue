@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useTicketHub } from '../useTicketHub'
-import type { TicketResponse } from '../types'
+import type { TicketResponse, QueueStatus } from '../types'
 
 type Stage = 'far' | 'close' | 'next' | 'served' | 'cancelled'
+type PostServe = 'done' | 'csat' | 'thanks'
 
 function getStage(ticket: TicketResponse): Stage {
   if (ticket.status === 'served') return 'served'
@@ -16,78 +17,46 @@ function getStage(ticket: TicketResponse): Stage {
 
 const TICKET_KEY = (branchId: string) => `fq_ticket_${branchId}`
 
-function requestNotificationPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission()
-  }
-}
-
-function sendNotification(title: string, body: string) {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body, icon: '/favicon.ico' })
-  }
-}
-
 export function TicketPage() {
   const { ticketId } = useParams<{ ticketId: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const id = Number(ticketId)
+  const vt = searchParams.get('vt') ?? undefined
 
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null)
   const [error, setError] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
-  const [actionLoading, setActionLoading] = useState(false)
-  const prevPeopleAhead = useRef<number | null>(null)
-  const prevStatus = useRef<string | null>(null)
+  const [postServe, setPostServe] = useState<PostServe>('done')
+
+  const viewedRef = useRef(false)
+  useEffect(() => {
+    if (viewedRef.current) return
+    viewedRef.current = true
+    api.ticketViewed(id, vt).catch(() => {})
+  }, [id])
 
   const refresh = useCallback(async () => {
     try {
       const t = await api.getTicket(id)
       setTicket(t)
+      api.getStatusPublic(t.branchId).then(setQueueStatus).catch(() => {})
     } catch {
       setError('Could not load your ticket.')
     }
   }, [id])
 
-  // Fire browser notifications when position changes
-  useEffect(() => {
-    if (!ticket) return
+  useEffect(() => { refresh() }, [refresh])
 
-    const prev = prevPeopleAhead.current
-    const prevSt = prevStatus.current
-    const curr = ticket.peopleAhead
-
-    if (prev !== null && prev !== curr) {
-      if (curr === 0) {
-        sendNotification("It's your turn! 🔔", `Ticket #${ticket.ticketNumber} — Go to the counter now!`)
-      } else if (curr <= 3 && (prev === null || prev > 3)) {
-        sendNotification('Almost your turn! 🏃', `${curr} ${curr === 1 ? 'person' : 'people'} ahead — Start heading back!`)
-      }
-    }
-
-    if (prevSt !== null && prevSt !== ticket.status && ticket.status === 'near') {
-      sendNotification("It's your turn! 🔔", `Ticket #${ticket.ticketNumber} — Head to the counter now!`)
-    }
-
-    prevPeopleAhead.current = curr
-    prevStatus.current = ticket.status
-  }, [ticket])
-
-  useEffect(() => {
-    refresh()
-    requestNotificationPermission()
-  }, [refresh])
-
-  useTicketHub({
+  const { connected } = useTicketHub({
     branchId: ticket?.branchId ?? '',
     onUpdate: refresh,
   })
 
   async function handleAction(action: () => Promise<unknown>) {
-    setActionLoading(true)
     try { await action(); await refresh() }
     catch { /* keep UI stable on error */ }
-    finally { setActionLoading(false) }
   }
 
   function clearTicket() {
@@ -96,7 +65,7 @@ export function TicketPage() {
 
   function handleLeaveConfirm() {
     handleAction(async () => {
-      await api.leave(id)
+      await api.leave(id, vt)
       clearTicket()
     })
     setConfirmLeave(false)
@@ -108,8 +77,8 @@ export function TicketPage() {
         <div>
           <div className="text-5xl mb-4">😕</div>
           <p className="text-gray-600">{error}</p>
-          <button onClick={() => navigate('/join')} className="mt-4 text-teal-brand underline text-sm">
-            Scan QR again
+          <button onClick={() => navigate('/')} className="mt-4 text-teal-brand underline text-sm">
+            Go back
           </button>
         </div>
       </div>
@@ -128,7 +97,13 @@ export function TicketPage() {
 
   if (stage === 'served') {
     clearTicket()
-    return <DoneScreen ticket={ticket} onDismiss={() => { clearTicket(); navigate('/join') }} />
+    if (postServe === 'csat') {
+      return <CsatScreen ticketId={id} vt={vt} onDone={() => setPostServe('thanks')} />
+    }
+    if (postServe === 'thanks') {
+      return <ThankYouScreen />
+    }
+    return <DoneScreen ticket={ticket} onDone={() => setPostServe('csat')} />
   }
 
   if (stage === 'cancelled') {
@@ -138,10 +113,7 @@ export function TicketPage() {
         <div>
           <div className="text-5xl mb-4">👋</div>
           <p className="text-xl font-bold text-gray-700">You've left the queue</p>
-          <p className="text-gray-400 text-sm mt-2">Scan the QR code to join again.</p>
-          <button onClick={() => navigate(`/join?branch=${ticket.branchId}`)} className="mt-6 bg-teal-brand text-white font-semibold px-6 py-3 rounded-xl">
-            Join Again
-          </button>
+          <p className="text-gray-400 text-sm mt-2">Scan the QR code at the counter to join again.</p>
         </div>
       </div>
     )
@@ -152,18 +124,19 @@ export function TicketPage() {
     stage === 'close' ? 'bg-amber-brand text-white' :
     'bg-white text-gray-900'
 
-  const isAway = ticket.status === 'away'
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-sm mx-auto">
-      {/* Header */}
+      {!connected && (
+        <div className="bg-amber-500 text-white text-center text-xs font-medium py-1.5 px-4">
+          Reconnecting…
+        </div>
+      )}
       <div className="bg-teal-brand text-white px-6 pt-10 pb-5">
         <p className="text-teal-light text-xs font-semibold tracking-widest uppercase">Your Queue Ticket</p>
         <p className="text-white font-semibold mt-1 text-sm">{ticket.branchId}</p>
       </div>
 
       <div className="flex-1 flex flex-col gap-4 px-5 py-5">
-        {/* Boarding-pass card */}
         <div className={`rounded-3xl shadow-lg p-7 text-center animate-bounce_in ${cardBg}`}>
           {stage === 'next' && (
             <div className="text-sm font-semibold tracking-widest uppercase mb-1 opacity-80">
@@ -177,12 +150,21 @@ export function TicketPage() {
           )}
 
           <div className={`text-8xl font-black leading-none my-2 ${stage === 'far' ? 'text-teal-brand' : ''}`}>
-            #{ticket.ticketNumber}
+            {ticket.displayNumber}
           </div>
 
-          <div className={`text-sm font-medium mb-4 ${stage === 'far' ? 'text-gray-500' : 'opacity-80'}`}>
+          <div className={`text-sm font-medium mb-2 ${stage === 'far' ? 'text-gray-500' : 'opacity-80'}`}>
             {ticket.serviceType}
           </div>
+
+          {ticket.waitEstimate && (
+            <div className={`mb-3 ${stage !== 'far' ? 'opacity-90' : 'text-teal-brand'}`}>
+              <span className="text-2xl font-black">~{ticket.waitEstimate.estimatedMinutes} min</span>
+              <span className={`text-xs ml-2 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
+                {ticket.waitEstimate.confidence}
+              </span>
+            </div>
+          )}
 
           <div className={`rounded-2xl px-4 py-3 ${stage === 'far' ? 'bg-gray-50' : 'bg-white/20'}`}>
             {ticket.peopleAhead === 0 ? (
@@ -191,56 +173,26 @@ export function TicketPage() {
               </p>
             ) : (
               <>
-                <p className={`text-2xl font-black ${stage !== 'far' ? 'text-white' : 'text-gray-800'}`}>
-                  {ticket.peopleAhead === 1
-                    ? '1 person is ahead of you'
-                    : `${ticket.peopleAhead} people are ahead of you`}
+                <p className={`text-3xl font-black ${stage !== 'far' ? 'text-white' : 'text-gray-800'}`}>
+                  {ticket.peopleAhead}
                 </p>
-                <p className={`text-xs mt-1 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
-                  You are number {ticket.peopleAhead + 1} in line
+                <p className={`text-xs font-medium ${stage !== 'far' ? 'opacity-80' : 'text-gray-400'}`}>
+                  {ticket.peopleAhead === 1 ? 'person' : 'people'} ahead of you
                 </p>
               </>
             )}
+            {queueStatus?.currentDisplayNumber != null && (
+              <p className={`text-xs mt-2 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
+                Now serving: <span className="font-bold">{queueStatus.currentDisplayNumber}</span>
+              </p>
+            )}
           </div>
-
-          {ticket.waitEstimate && ticket.peopleAhead > 0 && (
-            <p className={`text-xs mt-3 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
-              ~{ticket.waitEstimate.estimatedMinutes} min estimated · {ticket.waitEstimate.confidence}
-            </p>
-          )}
         </div>
 
-        {/* Status pill */}
         <div className="flex justify-center">
           <StatusPill status={ticket.status} />
         </div>
 
-        {/* Step Away / Check In toggle */}
-        {(stage === 'far' || stage === 'close') && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <p className="text-sm font-semibold text-gray-700 mb-1">
-              {isAway ? '📍 You\'re stepped away' : '🚶 Need to step out?'}
-            </p>
-            <p className="text-xs text-gray-400 mb-4">
-              {isAway
-                ? 'We\'re holding your spot. Tap below when you\'re back.'
-                : 'Grab a coffee or run an errand — we\'ll hold your spot and notify you.'}
-            </p>
-            <button
-              disabled={actionLoading}
-              onClick={() => handleAction(isAway ? () => api.checkIn(id) : () => api.stepAway(id))}
-              className={`w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 ${
-                isAway
-                  ? 'bg-teal-brand text-white hover:bg-teal-dark'
-                  : 'border-2 border-teal-brand text-teal-brand hover:bg-teal-brand hover:text-white'
-              }`}
-            >
-              {actionLoading ? '…' : isAway ? "✓ I'm back — Check In" : '🚶 Step Away'}
-            </button>
-          </div>
-        )}
-
-        {/* Leave queue */}
         <div className="mt-auto">
           {confirmLeave ? (
             <div className="bg-red-50 rounded-2xl p-4 text-center space-y-3">
@@ -271,7 +223,6 @@ export function TicketPage() {
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     waiting: { label: '⏳ Waiting', cls: 'bg-gray-100 text-gray-600' },
-    away:    { label: '🚶 Stepped away', cls: 'bg-amber-50 text-amber-dark border border-amber-brand' },
     near:    { label: '⚡ Almost your turn', cls: 'bg-amber-brand text-white' },
     arrived: { label: '✅ Checked in', cls: 'bg-green-100 text-green-700' },
   }
@@ -281,19 +232,68 @@ function StatusPill({ status }: { status: string }) {
   )
 }
 
-function DoneScreen({ ticket, onDismiss }: { ticket: TicketResponse; onDismiss: () => void }) {
+function DoneScreen({ ticket, onDone }: { ticket: TicketResponse; onDone: () => void }) {
   return (
     <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-center text-white">
       <div className="text-7xl mb-6">🎉</div>
       <h1 className="text-3xl font-black mb-2">You've been served!</h1>
-      <p className="text-teal-light text-sm mb-1">Ticket #{ticket.ticketNumber}</p>
+      <p className="text-teal-light text-sm mb-1">Ticket {ticket.displayNumber}</p>
       <p className="text-teal-light text-sm">{ticket.serviceType}</p>
       <button
-        onClick={onDismiss}
+        onClick={onDone}
         className="mt-10 bg-white text-teal-brand font-bold px-8 py-3 rounded-2xl shadow-lg"
       >
         Done
       </button>
+    </div>
+  )
+}
+
+const CSAT_AUTO_SECS = 10
+
+function CsatScreen({ ticketId, vt, onDone }: { ticketId: number; vt?: string; onDone: () => void }) {
+  const [countdown, setCountdown] = useState(CSAT_AUTO_SECS)
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(t); onDone(); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [onDone])
+
+  function handleRate(rating: number) {
+    api.rateTicket(ticketId, rating, vt).catch(() => {})
+    onDone()
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-10 p-8 text-center">
+      <p className="text-2xl font-bold text-gray-800">How was your experience?</p>
+      <div className="flex gap-8">
+        {(['😐', '🙂', '😊'] as const).map((emoji, i) => (
+          <button
+            key={i}
+            onClick={() => handleRate(i + 1)}
+            className="text-[80px] hover:scale-110 active:scale-95 transition-transform"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+      <p className="text-gray-400 text-sm">Auto-closing in {countdown}s</p>
+    </div>
+  )
+}
+
+function ThankYouScreen() {
+  return (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center gap-4">
+      <div className="text-7xl">👋</div>
+      <h1 className="text-2xl font-black text-gray-800">Thank you!</h1>
+      <p className="text-gray-400 text-sm">See you next time.</p>
     </div>
   )
 }
