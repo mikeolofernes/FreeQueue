@@ -381,8 +381,6 @@ export default function StaffApp() {
   const isServing = myTicket !== null
   const queueEmpty = !isServing && (status?.peopleWaiting ?? 0) === 0
   const isOpen = status?.isOpen ?? true
-  const selectedGroup = serviceGroups.find(g => g.id === selectedGroupId) ?? null
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-sm mx-auto">
       <header className="bg-teal-brand text-white px-5 py-4 flex items-center justify-between shadow-md">
