@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useTicketHub } from '../useTicketHub'
-import type { TicketResponse } from '../types'
+import type { TicketResponse, QueueStatus } from '../types'
 
 type Stage = 'far' | 'close' | 'next' | 'served' | 'cancelled'
 type PostServe = 'done' | 'csat' | 'thanks'
@@ -25,6 +25,7 @@ export function TicketPage() {
   const vt = searchParams.get('vt') ?? undefined
 
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null)
   const [error, setError] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [postServe, setPostServe] = useState<PostServe>('done')
@@ -40,6 +41,7 @@ export function TicketPage() {
     try {
       const t = await api.getTicket(id)
       setTicket(t)
+      api.getStatusPublic(t.branchId).then(setQueueStatus).catch(() => {})
     } catch {
       setError('Could not load your ticket.')
     }
@@ -178,6 +180,11 @@ export function TicketPage() {
                   {ticket.peopleAhead === 1 ? 'person' : 'people'} ahead of you
                 </p>
               </>
+            )}
+            {queueStatus?.currentDisplayNumber != null && (
+              <p className={`text-xs mt-2 ${stage !== 'far' ? 'opacity-70' : 'text-gray-400'}`}>
+                Now serving: <span className="font-bold">{queueStatus.currentDisplayNumber}</span>
+              </p>
             )}
           </div>
         </div>
