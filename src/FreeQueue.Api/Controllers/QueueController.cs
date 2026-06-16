@@ -100,12 +100,19 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
 
     // ── Staff endpoints (JWT required) ────────────────────────────────────────
 
+    [HttpGet("{branchId}/groups-status")]
+    public async Task<ActionResult<IEnumerable<GroupStatusItem>>> GetGroupsStatus(string branchId)
+    {
+        try { return Ok(await queue.GetGroupsStatusAsync(branchId)); }
+        catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+    }
+
     [Authorize]
     [HttpPost("{branchId}/callnext")]
-    public async Task<ActionResult<QueueStatusResponse>> CallNext(string branchId, [FromQuery] string? counterId = null)
+    public async Task<ActionResult<QueueStatusResponse>> CallNext(string branchId, [FromQuery] string? counterId = null, [FromQuery] int? serviceGroupId = null)
     {
         if (CheckBranch(branchId) is { } denied) return denied;
-        try { return Ok(await queue.CallNextAsync(branchId, counterId)); }
+        try { return Ok(await queue.CallNextAsync(branchId, counterId, serviceGroupId)); }
         catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
     }
 

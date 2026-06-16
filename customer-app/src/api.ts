@@ -1,4 +1,4 @@
-import type { BranchResponse, TicketResponse, QueueStatus, UndoResponse, BranchService, ServiceGroup, AdminBranch, AdminAccount, AnalyticsData, Appointment } from './types'
+import type { BranchResponse, TicketResponse, QueueStatus, GroupStatusItem, UndoResponse, BranchService, ServiceGroup, AdminBranch, AdminAccount, AnalyticsData, Appointment } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'fq_staff_token'
@@ -92,6 +92,9 @@ export const api = {
   getStatusPublic: (branchId: string) =>
     request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`),
 
+  getGroupsStatus: (branchId: string) =>
+    request<GroupStatusItem[]>(`/api/queue/${encodeURIComponent(branchId)}/groups-status`),
+
   lookupCustomer: (phone: string) =>
     request<{ name: string | null }>(`/api/queue/customer/lookup?phone=${encodeURIComponent(phone)}`),
 
@@ -130,8 +133,13 @@ export const api = {
   getStatus: (branchId: string) =>
     request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/status`, undefined, true),
 
-  callNext: (branchId: string, counterId?: string) =>
-    request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/callnext${counterId ? `?counterId=${encodeURIComponent(counterId)}` : ''}`, { method: 'POST' }, true),
+  callNext: (branchId: string, counterId?: string, serviceGroupId?: number) => {
+    const params = new URLSearchParams()
+    if (counterId) params.set('counterId', counterId)
+    if (serviceGroupId != null) params.set('serviceGroupId', String(serviceGroupId))
+    const qs = params.toString()
+    return request<QueueStatus>(`/api/queue/${encodeURIComponent(branchId)}/callnext${qs ? `?${qs}` : ''}`, { method: 'POST' }, true)
+  },
 
   advance: (branchId: string, ticketNumber: number, serviceType: string, durationSecs: number, counterId?: string) =>
     request<QueueStatus>('/api/queue/advance', {

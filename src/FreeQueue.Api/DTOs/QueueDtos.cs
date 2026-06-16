@@ -68,7 +68,21 @@ public record QueueStatusResponse(
     string? CounterId = null,
     int? CurrentTicketId = null,
     string? CurrentDisplayNumber = null,
-    IReadOnlyList<string>? NextDisplayNumbers = null
+    IReadOnlyList<string>? NextDisplayNumbers = null,
+    // Populated only on callNext responses — the specific ticket just called for this counter
+    int? CalledTicketId = null,
+    string? CalledDisplayNumber = null,
+    string? CalledServiceType = null
+);
+
+public record NowServingEntry(string DisplayNumber, string? ServiceType, string? CounterId);
+
+public record GroupStatusItem(
+    int? GroupId,
+    string GroupName,
+    string? Prefix,
+    int PeopleWaiting,
+    IReadOnlyList<NowServingEntry> NowServing
 );
 
 public record WaitEstimateDto(

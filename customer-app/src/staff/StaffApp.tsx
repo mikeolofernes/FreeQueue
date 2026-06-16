@@ -10,6 +10,9 @@ const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
 const COUNTER_ID_KEY = 'fq_counter_id'
 const HAS_DEFAULT_PIN_KEY = 'fq_has_default_pin'
+const GROUP_ID_KEY = 'fq_group_id'
+
+type MyTicket = { id: number; displayNumber: string; serviceType: string }
 
 type Panel = 'none' | 'pin' | 'services' | 'analytics' | 'appointments'
 
@@ -37,6 +40,11 @@ export default function StaffApp() {
   const [showTransfer, setShowTransfer] = useState(false)
   const [appointments, setAppointments] = useState<Appointment[] | null>(null)
   const [serviceGroups, setServiceGroups] = useState<ServiceGroup[]>([])
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(() => {
+    const v = localStorage.getItem(GROUP_ID_KEY)
+    return v ? parseInt(v) : null
+  })
+  const [myTicket, setMyTicket] = useState<MyTicket | null>(null)
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupPrefix, setNewGroupPrefix] = useState('')
   const [editingGroup, setEditingGroup] = useState<{ id: number; name: string; prefix: string } | null>(null)
@@ -61,11 +69,11 @@ export default function StaffApp() {
   }, [])
 
   useEffect(() => {
-    if (status?.currentTicketNumber !== prevTicket.current) {
-      prevTicket.current = status?.currentTicketNumber ?? null
-      setServingStartedAt(status?.currentTicketNumber != null ? new Date() : null)
+    const ticketNum = myTicket?.id ?? null
+    if (ticketNum !== prevTicket.current) {
+      prevTicket.current = ticketNum
     }
-  }, [status?.currentTicketNumber])
+  }, [myTicket?.id])
 
   useEffect(() => {
     if (branchId && isLoggedIn) {
@@ -99,10 +107,13 @@ export default function StaffApp() {
     localStorage.removeItem(BRANCH_KEY)
     localStorage.removeItem(BRANCH_NAME_KEY)
     localStorage.removeItem(HAS_DEFAULT_PIN_KEY)
+    localStorage.removeItem(GROUP_ID_KEY)
     setBranchId('')
     setBranchName('')
     setBranchServices([])
     setServiceGroups([])
+    setSelectedGroupId(null)
+    setMyTicket(null)
     setHasDefaultPin(false)
     setIsLoggedIn(false)
     setStatus(null)
@@ -113,15 +124,33 @@ export default function StaffApp() {
     if (advancing) return
     setAdvancing(true)
     try {
-      if (!status?.currentTicketNumber || !status.currentServiceType) {
-        const next = await api.callNext(branchId, counterId || undefined)
+      if (!myTicket) {
+        const next = await api.callNext(branchId, counterId || undefined, selectedGroupId ?? undefined)
         setStatus(next)
-        showToast('▶ Called first customer')
+        if (next.calledTicketId) {
+          setMyTicket({ id: next.calledTicketId, displayNumber: next.calledDisplayNumber!, serviceType: next.calledServiceType! })
+          setServingStartedAt(new Date())
+          showToast(`▶ Called ${next.calledDisplayNumber}`)
+        } else {
+          showToast('No tickets waiting in this group')
+        }
       } else {
         const duration = servingStartedAt ? Math.floor((Date.now() - servingStartedAt.getTime()) / 1000) : 0
-        const next = await api.advance(branchId, status.currentTicketNumber, status.currentServiceType, duration, counterId || undefined)
+        const next = await api.advance(branchId, myTicket.id, myTicket.serviceType, duration, counterId || undefined)
         setStatus(next)
-        showToast(`✓ Ticket ${status.currentDisplayNumber ?? `#${status.currentTicketNumber}`} done — called next`)
+        const prev = myTicket.displayNumber
+        setMyTicket(null)
+        setServingStartedAt(null)
+        // Immediately call the next ticket in our group
+        const upcoming = await api.callNext(branchId, counterId || undefined, selectedGroupId ?? undefined)
+        setStatus(upcoming)
+        if (upcoming.calledTicketId) {
+          setMyTicket({ id: upcoming.calledTicketId, displayNumber: upcoming.calledDisplayNumber!, serviceType: upcoming.calledServiceType! })
+          setServingStartedAt(new Date())
+          showToast(`✓ ${prev} done — called ${upcoming.calledDisplayNumber}`)
+        } else {
+          showToast(`✓ ${prev} done — queue empty`)
+        }
       }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed', 'err')
@@ -131,12 +160,19 @@ export default function StaffApp() {
   }
 
   async function handleNoShow() {
-    const ticketId = status?.currentTicketId
-    if (!ticketId) return
+    if (!myTicket) return
     try {
-      await api.noShow(ticketId)
-      showToast('No-show recorded — called next')
-      refreshStatus()
+      await api.noShow(myTicket.id)
+      setMyTicket(null)
+      setServingStartedAt(null)
+      showToast('No-show recorded')
+      // Call the next ticket in our group
+      const next = await api.callNext(branchId, counterId || undefined, selectedGroupId ?? undefined)
+      setStatus(next)
+      if (next.calledTicketId) {
+        setMyTicket({ id: next.calledTicketId, displayNumber: next.calledDisplayNumber!, serviceType: next.calledServiceType! })
+        setServingStartedAt(new Date())
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed', 'err')
     }
@@ -174,11 +210,12 @@ export default function StaffApp() {
   }
 
   async function handleTransfer(newServiceType: string) {
-    const ticketId = status?.currentTicketId
-    if (!ticketId) return
+    if (!myTicket) return
     setShowTransfer(false)
     try {
-      await api.transferTicket(ticketId, newServiceType)
+      await api.transferTicket(myTicket.id, newServiceType)
+      setMyTicket(null)
+      setServingStartedAt(null)
       showToast(`↔ Transferred to ${newServiceType}`)
       refreshStatus()
     } catch (err) {
@@ -341,9 +378,10 @@ export default function StaffApp() {
 
   if (!isLoggedIn) return <LoginScreen onLogin={handleLogin} />
 
-  const isServing = status?.currentTicketNumber != null
+  const isServing = myTicket !== null
   const queueEmpty = !isServing && (status?.peopleWaiting ?? 0) === 0
   const isOpen = status?.isOpen ?? true
+  const selectedGroup = serviceGroups.find(g => g.id === selectedGroupId) ?? null
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-sm mx-auto">
@@ -351,6 +389,23 @@ export default function StaffApp() {
         <div>
           <h1 className="font-bold text-lg leading-none">QueueFree</h1>
           <p className="text-teal-light text-sm mt-0.5 truncate max-w-[160px]">{branchName || branchId}</p>
+          {serviceGroups.length > 0 && (
+            <select
+              className="mt-1 text-xs bg-white/20 border border-white/30 text-white rounded-lg px-2 py-0.5 outline-none max-w-[160px]"
+              value={selectedGroupId ?? ''}
+              onChange={e => {
+                const val = e.target.value ? parseInt(e.target.value) : null
+                setSelectedGroupId(val)
+                localStorage.setItem(GROUP_ID_KEY, val != null ? String(val) : '')
+                setMyTicket(null)
+              }}
+            >
+              <option value="">All groups</option>
+              {serviceGroups.map(g => (
+                <option key={g.id} value={g.id}>{g.prefix ? `[${g.prefix}] ` : ''}{g.name}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {editingCounterId ? (
@@ -416,12 +471,9 @@ export default function StaffApp() {
           <div className="text-center space-y-1">
             <p className="text-xs font-semibold tracking-widest text-gray-400 uppercase">Now serving</p>
             <div className="text-8xl font-black text-teal-brand leading-none">
-              {status!.currentDisplayNumber ?? `#${status!.currentTicketNumber}`}
-              {status?.nextDisplayNumbers?.[0] != null && (
-                <span className="text-gray-300 text-3xl ml-3">→ {status.nextDisplayNumbers[0]}</span>
-              )}
+              {myTicket!.displayNumber}
             </div>
-            <p className="text-gray-500 font-medium">{status!.currentServiceType}</p>
+            <p className="text-gray-500 font-medium">{myTicket!.serviceType}</p>
           </div>
         ) : (
           <div className="text-center space-y-2">
@@ -448,12 +500,14 @@ export default function StaffApp() {
             >
               ✗ No-show
             </button>
-            <button
-              onClick={() => setShowTransfer(true)}
-              className="flex-1 py-3 rounded-xl border-2 border-blue-200 text-blue-600 font-semibold hover:bg-blue-50 transition-colors text-sm"
-            >
-              ↔ Transfer
-            </button>
+            {branchServices.length > 1 && (
+              <button
+                onClick={() => setShowTransfer(true)}
+                className="flex-1 py-3 rounded-xl border-2 border-blue-200 text-blue-600 font-semibold hover:bg-blue-50 transition-colors text-sm"
+              >
+                ↔ Transfer
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -801,7 +855,7 @@ export default function StaffApp() {
       {showTransfer && (
         <div className="fixed inset-0 bg-black/50 flex items-end z-40" onClick={() => setShowTransfer(false)}>
           <div className="bg-white w-full max-w-sm mx-auto rounded-t-2xl p-5" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-semibold text-gray-700 mb-3">Transfer Ticket {status?.currentDisplayNumber ?? `#${status?.currentTicketNumber}`} to:</p>
+            <p className="text-sm font-semibold text-gray-700 mb-3">Transfer Ticket {myTicket?.displayNumber} to:</p>
             {branchServices.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">No services configured</p>
             ) : (

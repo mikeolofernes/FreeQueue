@@ -78,12 +78,13 @@ public class QueueService(
         var now = DateTime.UtcNow;
         var today = DateOnly.FromDateTime(now);
 
-        // Find the currently-serving ticket by status rather than by number to avoid
-        // ambiguity when multiple groups share the same ticket number on the same day.
+        // Find the currently-serving ticket by status (and counterId when provided) rather
+        // than by number, to support multiple counters operating simultaneously.
         var current = await db.QueueTickets
             .Where(t => t.BranchId == req.BranchId
                      && (t.Status == TicketStatus.Near || t.Status == TicketStatus.Arrived)
-                     && t.QueueDate == today)
+                     && t.QueueDate == today
+                     && (req.CounterId == null || t.CounterId == req.CounterId))
             .FirstOrDefaultAsync();
 
         if (req.DurationSecs > 0)
@@ -131,9 +132,9 @@ public class QueueService(
 
     // ── Call Next ─────────────────────────────────────────────────────────────
 
-    public async Task<QueueStatusResponse> CallNextAsync(string branchId, string? counterId = null)
+    public async Task<QueueStatusResponse> CallNextAsync(string branchId, string? counterId = null, int? serviceGroupId = null)
     {
-        var next = await NextActiveTicketAsync(branchId);
+        var next = await NextActiveTicketAsync(branchId, serviceGroupId);
         if (next != null)
         {
             next.Status = TicketStatus.Near;
@@ -143,7 +144,16 @@ public class QueueService(
 
             await NotifyYourTurnSoonAsync(branchId, next.TicketNumber);
         }
-        return await BroadcastQueueStateAsync(branchId);
+
+        var status = await BroadcastQueueStateAsync(branchId);
+
+        if (next == null) return status;
+        return status with
+        {
+            CalledTicketId = next.Id,
+            CalledDisplayNumber = next.DisplayNumber ?? next.TicketNumber.ToString(),
+            CalledServiceType = next.ServiceType,
+        };
     }
 
     // ── Walk-in ───────────────────────────────────────────────────────────────
@@ -369,6 +379,49 @@ public class QueueService(
         return MapTicket(ticket, peopleAhead, estimate);
     }
 
+    // ── Per-group status (for display board) ──────────────────────────────────
+
+    public async Task<IReadOnlyList<GroupStatusItem>> GetGroupsStatusAsync(string branchId)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var groups = await db.ServiceGroups
+            .Where(g => g.BranchId == branchId)
+            .OrderBy(g => g.SortOrder).ThenBy(g => g.Id)
+            .ToListAsync();
+
+        var activeTickets = await db.QueueTickets
+            .Where(t => t.BranchId == branchId && TicketStatus.Active.Contains(t.Status) && t.QueueDate == today)
+            .ToListAsync();
+
+        var result = new List<GroupStatusItem>();
+
+        foreach (var group in groups)
+        {
+            var tickets = activeTickets.Where(t => t.ServiceGroupId == group.Id).ToList();
+            var nowServing = tickets
+                .Where(t => t.Status == TicketStatus.Near || t.Status == TicketStatus.Arrived)
+                .OrderBy(t => t.CalledAt)
+                .Select(t => new NowServingEntry(t.DisplayNumber ?? t.TicketNumber.ToString(), t.ServiceType, t.CounterId))
+                .ToList();
+            result.Add(new GroupStatusItem(group.Id, group.Name, group.Prefix, tickets.Count(t => t.Status == TicketStatus.Waiting), nowServing));
+        }
+
+        // Include ungrouped tickets if any exist
+        var ungrouped = activeTickets.Where(t => t.ServiceGroupId == null).ToList();
+        if (ungrouped.Count > 0)
+        {
+            var nowServing = ungrouped
+                .Where(t => t.Status == TicketStatus.Near || t.Status == TicketStatus.Arrived)
+                .OrderBy(t => t.CalledAt)
+                .Select(t => new NowServingEntry(t.DisplayNumber ?? t.TicketNumber.ToString(), t.ServiceType, t.CounterId))
+                .ToList();
+            result.Add(new GroupStatusItem(null, "General", null, ungrouped.Count(t => t.Status == TicketStatus.Waiting), nowServing));
+        }
+
+        return result;
+    }
+
     // ── Broadcast ─────────────────────────────────────────────────────────────
 
     public async Task BroadcastMessageAsync(string branchId, string message)
@@ -514,9 +567,11 @@ public class QueueService(
         return priorityCount + regularAhead;
     }
 
-    private async Task<QueueTicket?> NextActiveTicketAsync(string branchId) =>
+    private async Task<QueueTicket?> NextActiveTicketAsync(string branchId, int? serviceGroupId = null) =>
         await db.QueueTickets
-            .Where(t => t.BranchId == branchId && t.Status == TicketStatus.Waiting)
+            .Where(t => t.BranchId == branchId
+                     && t.Status == TicketStatus.Waiting
+                     && (serviceGroupId == null || t.ServiceGroupId == serviceGroupId))
             .OrderByDescending(t => t.Priority)
             .ThenBy(t => t.TicketNumber)
             .FirstOrDefaultAsync();

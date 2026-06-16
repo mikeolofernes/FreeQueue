@@ -46,6 +46,24 @@ export interface QueueStatus {
   currentTicketId: number | null
   currentDisplayNumber: string | null
   nextDisplayNumbers: string[] | null
+  // Populated on callNext responses only
+  calledTicketId: number | null
+  calledDisplayNumber: string | null
+  calledServiceType: string | null
+}
+
+export interface NowServingEntry {
+  displayNumber: string
+  serviceType: string | null
+  counterId: string | null
+}
+
+export interface GroupStatusItem {
+  groupId: number | null
+  groupName: string
+  prefix: string | null
+  peopleWaiting: number
+  nowServing: NowServingEntry[]
 }
 
 export interface UndoResponse {
