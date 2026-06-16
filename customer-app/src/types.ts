@@ -2,6 +2,7 @@ export interface TicketResponse {
   id: number
   branchId: string
   ticketNumber: number
+  displayNumber: string
   serviceType: string
   customerName: string | null
   status: string
@@ -43,6 +44,8 @@ export interface QueueStatus {
   nextTicketNumbers: number[] | null
   counterId: string | null
   currentTicketId: number | null
+  currentDisplayNumber: string | null
+  nextDisplayNumbers: string[] | null
 }
 
 export interface UndoResponse {
@@ -54,6 +57,16 @@ export interface BranchService {
   id: number
   name: string
   sortOrder: number
+  serviceGroupId: number | null
+  serviceGroupName: string | null
+}
+
+export interface ServiceGroup {
+  id: number
+  name: string
+  prefix: string | null
+  sortOrder: number
+  services: BranchService[]
 }
 
 export interface AdminAccount {

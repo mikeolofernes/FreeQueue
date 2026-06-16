@@ -20,6 +20,8 @@ public class QueueTicket
     public string? CounterId { get; set; }
     public int? Rating { get; set; }
     public string? ViewToken { get; set; }
+    public int? ServiceGroupId { get; set; }
+    public string? DisplayNumber { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Branch Branch { get; set; } = default!;

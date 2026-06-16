@@ -4,7 +4,7 @@ import { useQueueHub } from './useQueueHub'
 import { LoginScreen } from './LoginScreen'
 import { WalkInModal } from './WalkInModal'
 import { ElapsedTimer } from './ElapsedTimer'
-import type { QueueStatus, BranchService, AnalyticsData, Appointment } from '../types'
+import type { QueueStatus, BranchService, ServiceGroup, AnalyticsData, Appointment } from '../types'
 
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
@@ -36,6 +36,10 @@ export default function StaffApp() {
   const [counterIdInput, setCounterIdInput] = useState('')
   const [showTransfer, setShowTransfer] = useState(false)
   const [appointments, setAppointments] = useState<Appointment[] | null>(null)
+  const [serviceGroups, setServiceGroups] = useState<ServiceGroup[]>([])
+  const [newGroupName, setNewGroupName] = useState('')
+  const [newGroupPrefix, setNewGroupPrefix] = useState('')
+  const [editingGroup, setEditingGroup] = useState<{ id: number; name: string; prefix: string } | null>(null)
   const prevTicket = useRef<number | null>(null)
 
   const showToast = useCallback((msg: string, type: 'ok' | 'err' = 'ok') => {
@@ -52,6 +56,10 @@ export default function StaffApp() {
     try { setBranchServices(await api.getServices(id)) } catch { /* keep stale */ }
   }, [])
 
+  const loadGroups = useCallback(async (id: string) => {
+    try { setServiceGroups(await api.getGroups(id)) } catch { /* keep stale */ }
+  }, [])
+
   useEffect(() => {
     if (status?.currentTicketNumber !== prevTicket.current) {
       prevTicket.current = status?.currentTicketNumber ?? null
@@ -63,8 +71,9 @@ export default function StaffApp() {
     if (branchId && isLoggedIn) {
       refreshStatus()
       loadServices(branchId)
+      loadGroups(branchId)
     }
-  }, [branchId, isLoggedIn, refreshStatus, loadServices])
+  }, [branchId, isLoggedIn, refreshStatus, loadServices, loadGroups])
 
   useQueueHub({
     branchId,
@@ -93,6 +102,7 @@ export default function StaffApp() {
     setBranchId('')
     setBranchName('')
     setBranchServices([])
+    setServiceGroups([])
     setHasDefaultPin(false)
     setIsLoggedIn(false)
     setStatus(null)
@@ -111,7 +121,7 @@ export default function StaffApp() {
         const duration = servingStartedAt ? Math.floor((Date.now() - servingStartedAt.getTime()) / 1000) : 0
         const next = await api.advance(branchId, status.currentTicketNumber, status.currentServiceType, duration, counterId || undefined)
         setStatus(next)
-        showToast(`✓ Ticket #${status.currentTicketNumber} done — called next`)
+        showToast(`✓ Ticket ${status.currentDisplayNumber ?? `#${status.currentTicketNumber}`} done — called next`)
       }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed', 'err')
@@ -136,7 +146,7 @@ export default function StaffApp() {
     setShowWalkIn(false)
     try {
       const ticket = await api.addWalkIn(branchId, serviceType, customerName, priority)
-      showToast(`✓ ${priority ? '⚡ Priority ' : ''}Walk-in added — Ticket #${ticket.ticketNumber}`)
+      showToast(`✓ ${priority ? '⚡ Priority ' : ''}Walk-in added — Ticket ${ticket.displayNumber}`)
       refreshStatus()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to add walk-in', 'err')
@@ -232,6 +242,58 @@ export default function StaffApp() {
       setBranchServices(prev => prev.filter(s => s.id !== id))
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to delete service', 'err')
+    }
+  }
+
+  async function handleAddGroup(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newGroupName.trim()) return
+    try {
+      const group = await api.createGroup(branchId, newGroupName.trim(), newGroupPrefix.trim() || undefined)
+      setServiceGroups(prev => [...prev, group])
+      setNewGroupName('')
+      setNewGroupPrefix('')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to create group', 'err')
+    }
+  }
+
+  async function handleUpdateGroup(id: number, name: string, prefix: string) {
+    if (!name.trim()) return
+    try {
+      const updated = await api.updateGroup(branchId, id, name.trim(), prefix.trim() || null)
+      setServiceGroups(prev => prev.map(g => g.id === id ? updated : g))
+      setEditingGroup(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update group', 'err')
+    }
+  }
+
+  async function handleDeleteGroup(id: number) {
+    try {
+      await api.deleteGroup(branchId, id)
+      setServiceGroups(prev => prev.filter(g => g.id !== id))
+      // Services in this group become ungrouped; reload to get updated state
+      await loadServices(branchId)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete group', 'err')
+    }
+  }
+
+  async function handleAssignGroup(serviceId: number, groupId: number | null) {
+    try {
+      if (groupId !== null) {
+        await api.assignServiceToGroup(branchId, groupId, serviceId)
+      } else {
+        const svc = branchServices.find(s => s.id === serviceId)
+        if (svc?.serviceGroupId) {
+          await api.removeServiceFromGroup(branchId, svc.serviceGroupId, serviceId)
+        }
+      }
+      await loadServices(branchId)
+      await loadGroups(branchId)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update group assignment', 'err')
     }
   }
 
@@ -354,9 +416,9 @@ export default function StaffApp() {
           <div className="text-center space-y-1">
             <p className="text-xs font-semibold tracking-widest text-gray-400 uppercase">Now serving</p>
             <div className="text-8xl font-black text-teal-brand leading-none">
-              #{status!.currentTicketNumber}
-              {status?.nextTicketNumbers?.[0] != null && (
-                <span className="text-gray-300 text-3xl ml-3">→ #{status.nextTicketNumbers[0]}</span>
+              {status!.currentDisplayNumber ?? `#${status!.currentTicketNumber}`}
+              {status?.nextDisplayNumbers?.[0] != null && (
+                <span className="text-gray-300 text-3xl ml-3">→ {status.nextDisplayNumbers[0]}</span>
               )}
             </div>
             <p className="text-gray-500 font-medium">{status!.currentServiceType}</p>
@@ -492,47 +554,130 @@ export default function StaffApp() {
 
       {/* Services panel */}
       {activePanel === 'services' && (
-        <div className="bg-white border-t border-gray-200 px-5 py-4">
-          <p className="text-sm font-semibold text-gray-700 mb-3">Services Offered</p>
-          <div className="space-y-2 mb-3 max-h-52 overflow-y-auto">
-            {branchServices.length === 0 && (
-              <p className="text-xs text-gray-400 italic">No services yet. Add one below.</p>
-            )}
-            {branchServices.map(s => (
-              <div key={s.id} className="flex items-center gap-2">
-                {editingService?.id === s.id ? (
-                  <>
-                    <input
-                      className="flex-1 border-2 border-teal-brand rounded-lg px-3 py-1.5 text-sm outline-none"
-                      value={editingService.name}
-                      onChange={e => setEditingService({ id: s.id, name: e.target.value })}
-                      onKeyDown={e => { if (e.key === 'Enter') handleUpdateService(s.id, editingService.name) }}
-                      autoFocus
-                    />
-                    <button onClick={() => handleUpdateService(s.id, editingService.name)} className="px-3 py-1.5 bg-teal-brand text-white text-xs rounded-lg">Save</button>
-                    <button onClick={() => setEditingService(null)} className="px-2 py-1.5 text-gray-400 text-xs rounded-lg">✕</button>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex-1 text-sm text-gray-700 py-1">{s.name}</span>
-                    <button onClick={() => setEditingService({ id: s.id, name: s.name })} className="text-gray-400 hover:text-teal-brand p-1 text-sm transition-colors" title="Edit">✎</button>
-                    <button onClick={() => handleDeleteService(s.id)} className="text-gray-400 hover:text-red-500 p-1 text-sm transition-colors" title="Delete">✕</button>
-                  </>
-                )}
-              </div>
-            ))}
+        <div className="bg-white border-t border-gray-200 px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Groups section */}
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-2">Queue Groups</p>
+            <p className="text-xs text-gray-400 mb-3">Services in the same group share one queue number sequence. Add an optional prefix (e.g. "A") to format numbers as A-1, A-2…</p>
+            <div className="space-y-2 mb-3">
+              {serviceGroups.length === 0 && (
+                <p className="text-xs text-gray-400 italic">No groups yet.</p>
+              )}
+              {serviceGroups.map(g => (
+                <div key={g.id} className="border border-gray-100 rounded-xl p-3 space-y-2">
+                  {editingGroup?.id === g.id ? (
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 border-2 border-teal-brand rounded-lg px-3 py-1.5 text-sm outline-none"
+                        value={editingGroup.name}
+                        onChange={e => setEditingGroup({ ...editingGroup, name: e.target.value })}
+                        placeholder="Group name"
+                      />
+                      <input
+                        className="w-16 border-2 border-teal-brand rounded-lg px-2 py-1.5 text-sm outline-none text-center"
+                        value={editingGroup.prefix}
+                        onChange={e => setEditingGroup({ ...editingGroup, prefix: e.target.value })}
+                        placeholder="A"
+                        maxLength={5}
+                      />
+                      <button onClick={() => handleUpdateGroup(g.id, editingGroup.name, editingGroup.prefix)} className="px-3 py-1.5 bg-teal-brand text-white text-xs rounded-lg">Save</button>
+                      <button onClick={() => setEditingGroup(null)} className="px-2 py-1.5 text-gray-400 text-xs rounded-lg">✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1 text-sm font-medium text-gray-800">
+                        {g.prefix && <span className="text-teal-brand font-bold mr-1">[{g.prefix}]</span>}
+                        {g.name}
+                      </span>
+                      <button onClick={() => setEditingGroup({ id: g.id, name: g.name, prefix: g.prefix ?? '' })} className="text-gray-400 hover:text-teal-brand p-1 text-sm" title="Edit">✎</button>
+                      <button onClick={() => handleDeleteGroup(g.id)} className="text-gray-400 hover:text-red-500 p-1 text-sm" title="Delete">✕</button>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-1">
+                    {g.services.map(s => (
+                      <span key={s.id} className="text-xs bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full">{s.name}</span>
+                    ))}
+                    {g.services.length === 0 && <span className="text-xs text-gray-400 italic">No services assigned</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <form onSubmit={handleAddGroup} className="flex gap-2">
+              <input
+                className="flex-1 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-3 py-2 text-sm outline-none transition-colors"
+                placeholder="Group name (e.g. Teller)"
+                value={newGroupName}
+                onChange={e => setNewGroupName(e.target.value)}
+              />
+              <input
+                className="w-16 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-2 py-2 text-sm outline-none transition-colors text-center"
+                placeholder="A"
+                value={newGroupPrefix}
+                onChange={e => setNewGroupPrefix(e.target.value)}
+                maxLength={5}
+              />
+              <button type="submit" disabled={!newGroupName.trim()} className="px-4 py-2 rounded-xl bg-teal-brand text-white text-sm font-semibold disabled:opacity-40 hover:bg-teal-dark transition-colors">
+                Add
+              </button>
+            </form>
           </div>
-          <form onSubmit={handleAddService} className="flex gap-2">
-            <input
-              className="flex-1 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-3 py-2 text-sm outline-none transition-colors"
-              placeholder="New service name"
-              value={newService}
-              onChange={e => setNewService(e.target.value)}
-            />
-            <button type="submit" disabled={!newService.trim()} className="px-4 py-2 rounded-xl bg-teal-brand text-white text-sm font-semibold disabled:opacity-40 hover:bg-teal-dark transition-colors">
-              Add
-            </button>
-          </form>
+
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">Services</p>
+            <div className="space-y-2 mb-3">
+              {branchServices.length === 0 && (
+                <p className="text-xs text-gray-400 italic">No services yet. Add one below.</p>
+              )}
+              {branchServices.map(s => (
+                <div key={s.id} className="flex items-center gap-2">
+                  {editingService?.id === s.id ? (
+                    <>
+                      <input
+                        className="flex-1 border-2 border-teal-brand rounded-lg px-3 py-1.5 text-sm outline-none"
+                        value={editingService.name}
+                        onChange={e => setEditingService({ id: s.id, name: e.target.value })}
+                        onKeyDown={e => { if (e.key === 'Enter') handleUpdateService(s.id, editingService.name) }}
+                        autoFocus
+                      />
+                      <button onClick={() => handleUpdateService(s.id, editingService.name)} className="px-3 py-1.5 bg-teal-brand text-white text-xs rounded-lg">Save</button>
+                      <button onClick={() => setEditingService(null)} className="px-2 py-1.5 text-gray-400 text-xs rounded-lg">✕</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-sm text-gray-700 py-1">{s.name}</span>
+                      {s.serviceGroupName && (
+                        <span className="text-xs bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full">{s.serviceGroupName}</span>
+                      )}
+                      <select
+                        className="text-xs border border-gray-200 rounded-lg px-1 py-1 text-gray-500 outline-none"
+                        value={s.serviceGroupId ?? ''}
+                        onChange={e => handleAssignGroup(s.id, e.target.value ? parseInt(e.target.value) : null)}
+                        title="Assign to group"
+                      >
+                        <option value="">No group</option>
+                        {serviceGroups.map(g => (
+                          <option key={g.id} value={g.id}>{g.name}</option>
+                        ))}
+                      </select>
+                      <button onClick={() => setEditingService({ id: s.id, name: s.name })} className="text-gray-400 hover:text-teal-brand p-1 text-sm transition-colors" title="Edit">✎</button>
+                      <button onClick={() => handleDeleteService(s.id)} className="text-gray-400 hover:text-red-500 p-1 text-sm transition-colors" title="Delete">✕</button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <form onSubmit={handleAddService} className="flex gap-2">
+              <input
+                className="flex-1 border-2 border-gray-200 focus:border-teal-brand rounded-xl px-3 py-2 text-sm outline-none transition-colors"
+                placeholder="New service name"
+                value={newService}
+                onChange={e => setNewService(e.target.value)}
+              />
+              <button type="submit" disabled={!newService.trim()} className="px-4 py-2 rounded-xl bg-teal-brand text-white text-sm font-semibold disabled:opacity-40 hover:bg-teal-dark transition-colors">
+                Add
+              </button>
+            </form>
+          </div>
         </div>
       )}
 
@@ -656,7 +801,7 @@ export default function StaffApp() {
       {showTransfer && (
         <div className="fixed inset-0 bg-black/50 flex items-end z-40" onClick={() => setShowTransfer(false)}>
           <div className="bg-white w-full max-w-sm mx-auto rounded-t-2xl p-5" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-semibold text-gray-700 mb-3">Transfer Ticket #{status?.currentTicketNumber} to:</p>
+            <p className="text-sm font-semibold text-gray-700 mb-3">Transfer Ticket {status?.currentDisplayNumber ?? `#${status?.currentTicketNumber}`} to:</p>
             {branchServices.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">No services configured</p>
             ) : (

@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<QueueTransaction> QueueTransactions => Set<QueueTransaction>();
     public DbSet<StaffAccount> StaffAccounts => Set<StaffAccount>();
     public DbSet<BranchService> BranchServices => Set<BranchService>();
+    public DbSet<ServiceGroup> ServiceGroups => Set<ServiceGroup>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
 
     protected override void OnModelCreating(ModelBuilder mb)
@@ -35,7 +36,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.Status).HasMaxLength(20).HasDefaultValue("waiting");
             e.Property(t => t.Priority).HasDefaultValue(false);
             e.Property(t => t.CounterId).HasMaxLength(50);
-            e.HasIndex(t => new { t.BranchId, t.QueueDate, t.TicketNumber }).IsUnique();
+            e.Property(t => t.DisplayNumber).HasMaxLength(20);
+            // Partial unique indexes (grouped vs ungrouped) are managed by raw SQL in Program.cs
             e.HasIndex(t => new { t.BranchId, t.Status });
         });
 
@@ -61,7 +63,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(s => s.Id);
             e.Property(s => s.Name).HasMaxLength(200).IsRequired();
             e.HasOne(s => s.Branch).WithMany(b => b.Services).HasForeignKey(s => s.BranchId);
+            e.HasOne(s => s.ServiceGroup).WithMany(g => g.Services).HasForeignKey(s => s.ServiceGroupId).IsRequired(false);
             e.HasIndex(s => s.BranchId);
+        });
+
+        mb.Entity<ServiceGroup>(e =>
+        {
+            e.HasKey(g => g.Id);
+            e.Property(g => g.Name).HasMaxLength(200).IsRequired();
+            e.Property(g => g.Prefix).HasMaxLength(5);
+            e.HasOne(g => g.Branch).WithMany().HasForeignKey(g => g.BranchId);
+            e.HasIndex(g => g.BranchId);
         });
 
         mb.Entity<Appointment>(e =>

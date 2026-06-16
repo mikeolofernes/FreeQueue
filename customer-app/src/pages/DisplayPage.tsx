@@ -31,8 +31,7 @@ export function DisplayPage() {
     )
   }
 
-  const nextTickets = status?.nextTicketNumbers ?? []
-  const upNext = nextTickets.slice(0, 3)
+  const upNext = (status?.nextTicketNumbers ?? []).slice(0, 3)
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-12 gap-10 select-none">
@@ -54,7 +53,7 @@ export function DisplayPage() {
         {status?.currentTicketNumber != null ? (
           <>
             <div className="text-[220px] font-black leading-none tabular-nums">
-              #{status.currentTicketNumber}
+              {status.currentDisplayNumber ?? `#${status.currentTicketNumber}`}
             </div>
             <p className="text-gray-300 text-2xl mt-2">{status.currentServiceType}</p>
             {status.counterId && (
@@ -71,11 +70,14 @@ export function DisplayPage() {
         <div className="text-center">
           <p className="text-gray-500 text-sm uppercase tracking-widest mb-3">Next Up</p>
           <div className="flex gap-6 justify-center">
-            {upNext.map((num, i) => (
-              <div key={num} className={`text-center ${i === 0 ? 'opacity-100' : 'opacity-50'}`}>
-                <div className="text-5xl font-black tabular-nums text-gray-300">#{num}</div>
-              </div>
-            ))}
+            {upNext.map((num, i) => {
+              const display = status?.nextDisplayNumbers?.[i] ?? `#${num}`
+              return (
+                <div key={num} className={`text-center ${i === 0 ? 'opacity-100' : 'opacity-50'}`}>
+                  <div className="text-5xl font-black tabular-nums text-gray-300">{display}</div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

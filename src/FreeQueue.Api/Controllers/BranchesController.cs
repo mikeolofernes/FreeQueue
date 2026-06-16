@@ -117,8 +117,9 @@ public class BranchesController(AppDbContext db, QueueService queue) : Controlle
         if (!await db.Branches.AnyAsync(b => b.Id == id)) return NotFound();
         var services = await db.BranchServices
             .Where(s => s.BranchId == id)
+            .Include(s => s.ServiceGroup)
             .OrderBy(s => s.SortOrder).ThenBy(s => s.Id)
-            .Select(s => new BranchServiceResponse(s.Id, s.Name, s.SortOrder))
+            .Select(s => new BranchServiceResponse(s.Id, s.Name, s.SortOrder, s.ServiceGroupId, s.ServiceGroup != null ? s.ServiceGroup.Name : null))
             .ToListAsync();
         return Ok(services);
     }
@@ -133,7 +134,7 @@ public class BranchesController(AppDbContext db, QueueService queue) : Controlle
         var svc = new Models.BranchService { BranchId = id, Name = req.Name.Trim(), SortOrder = maxOrder + 1 };
         db.BranchServices.Add(svc);
         await db.SaveChangesAsync();
-        return Ok(new BranchServiceResponse(svc.Id, svc.Name, svc.SortOrder));
+        return Ok(new BranchServiceResponse(svc.Id, svc.Name, svc.SortOrder, null, null));
     }
 
     [Authorize]
@@ -145,7 +146,8 @@ public class BranchesController(AppDbContext db, QueueService queue) : Controlle
         if (svc == null) return NotFound();
         svc.Name = req.Name.Trim();
         await db.SaveChangesAsync();
-        return Ok(new BranchServiceResponse(svc.Id, svc.Name, svc.SortOrder));
+        await db.Entry(svc).Reference(s => s.ServiceGroup).LoadAsync();
+        return Ok(new BranchServiceResponse(svc.Id, svc.Name, svc.SortOrder, svc.ServiceGroupId, svc.ServiceGroup?.Name));
     }
 
     [Authorize]

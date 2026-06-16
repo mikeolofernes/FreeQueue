@@ -43,6 +43,7 @@ public record TicketResponse(
     int Id,
     string BranchId,
     int TicketNumber,
+    string DisplayNumber,
     string ServiceType,
     string? CustomerName,
     string Status,
@@ -65,7 +66,9 @@ public record QueueStatusResponse(
     bool IsOpen = true,
     IReadOnlyList<int>? NextTicketNumbers = null,
     string? CounterId = null,
-    int? CurrentTicketId = null
+    int? CurrentTicketId = null,
+    string? CurrentDisplayNumber = null,
+    IReadOnlyList<string>? NextDisplayNumbers = null
 );
 
 public record WaitEstimateDto(

@@ -148,7 +148,7 @@ export function TicketPage() {
           )}
 
           <div className={`text-8xl font-black leading-none my-2 ${stage === 'far' ? 'text-teal-brand' : ''}`}>
-            #{ticket.ticketNumber}
+            {ticket.displayNumber}
           </div>
 
           <div className={`text-sm font-medium mb-2 ${stage === 'far' ? 'text-gray-500' : 'opacity-80'}`}>
@@ -230,7 +230,7 @@ function DoneScreen({ ticket, onDone }: { ticket: TicketResponse; onDone: () => 
     <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-center text-white">
       <div className="text-7xl mb-6">🎉</div>
       <h1 className="text-3xl font-black mb-2">You've been served!</h1>
-      <p className="text-teal-light text-sm mb-1">Ticket #{ticket.ticketNumber}</p>
+      <p className="text-teal-light text-sm mb-1">Ticket {ticket.displayNumber}</p>
       <p className="text-teal-light text-sm">{ticket.serviceType}</p>
       <button
         onClick={onDone}

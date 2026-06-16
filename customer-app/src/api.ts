@@ -1,4 +1,4 @@
-import type { BranchResponse, TicketResponse, QueueStatus, UndoResponse, BranchService, AdminBranch, AdminAccount, AnalyticsData, Appointment } from './types'
+import type { BranchResponse, TicketResponse, QueueStatus, UndoResponse, BranchService, ServiceGroup, AdminBranch, AdminAccount, AnalyticsData, Appointment } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'fq_staff_token'
@@ -180,6 +180,37 @@ export const api = {
 
   deleteService: (branchId: string, serviceId: number) =>
     request<void>(`/api/branches/${encodeURIComponent(branchId)}/services/${serviceId}`, {
+      method: 'DELETE',
+    }, true),
+
+  // Service Groups
+  getGroups: (branchId: string) =>
+    request<ServiceGroup[]>(`/api/branches/${encodeURIComponent(branchId)}/groups`),
+
+  createGroup: (branchId: string, name: string, prefix?: string) =>
+    request<ServiceGroup>(`/api/branches/${encodeURIComponent(branchId)}/groups`, {
+      method: 'POST',
+      body: JSON.stringify({ name, prefix }),
+    }, true),
+
+  updateGroup: (branchId: string, groupId: number, name: string, prefix?: string | null) =>
+    request<ServiceGroup>(`/api/branches/${encodeURIComponent(branchId)}/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, prefix }),
+    }, true),
+
+  deleteGroup: (branchId: string, groupId: number) =>
+    request<void>(`/api/branches/${encodeURIComponent(branchId)}/groups/${groupId}`, {
+      method: 'DELETE',
+    }, true),
+
+  assignServiceToGroup: (branchId: string, groupId: number, serviceId: number) =>
+    request<void>(`/api/branches/${encodeURIComponent(branchId)}/groups/${groupId}/services/${serviceId}`, {
+      method: 'PUT',
+    }, true),
+
+  removeServiceFromGroup: (branchId: string, groupId: number, serviceId: number) =>
+    request<void>(`/api/branches/${encodeURIComponent(branchId)}/groups/${groupId}/services/${serviceId}`, {
       method: 'DELETE',
     }, true),
 

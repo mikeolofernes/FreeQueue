@@ -41,12 +41,16 @@ public class QueueService(
                 throw new InvalidOperationException("Queue is closed for new entries.");
         }
 
-        var nextNumber = await NextTicketNumberAsync(req.BranchId);
+        var (groupId, prefix) = await ResolveGroupAsync(req.BranchId, req.ServiceType);
+        var nextNumber = await NextTicketNumberAsync(req.BranchId, groupId);
+        var displayNumber = prefix != null ? $"{prefix}-{nextNumber}" : nextNumber.ToString();
 
         var ticket = new QueueTicket
         {
             BranchId = req.BranchId,
             TicketNumber = nextNumber,
+            DisplayNumber = displayNumber,
+            ServiceGroupId = groupId,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
             ServiceType = req.ServiceType,
             CustomerName = req.CustomerName,
@@ -175,9 +179,12 @@ public class QueueService(
     public async Task<TicketResponse> TransferAsync(int ticketId, string newServiceType)
     {
         var ticket = await GetActiveTicketAsync(ticketId);
+        var (groupId, prefix) = await ResolveGroupAsync(ticket.BranchId, newServiceType);
         ticket.ServiceType = newServiceType;
+        ticket.ServiceGroupId = groupId;
         // Move to end of queue so fair ordering is maintained
-        ticket.TicketNumber = await NextTicketNumberAsync(ticket.BranchId);
+        ticket.TicketNumber = await NextTicketNumberAsync(ticket.BranchId, groupId);
+        ticket.DisplayNumber = prefix != null ? $"{prefix}-{ticket.TicketNumber}" : ticket.TicketNumber.ToString();
         ticket.QueueDate = DateOnly.FromDateTime(DateTime.UtcNow);
         ticket.Status = TicketStatus.Waiting;
         await db.SaveChangesAsync();
@@ -218,7 +225,10 @@ public class QueueService(
         }
         else
         {
-            ticket.TicketNumber = await NextTicketNumberAsync(ticket.BranchId);
+            ticket.TicketNumber = await NextTicketNumberAsync(ticket.BranchId, ticket.ServiceGroupId);
+            ticket.DisplayNumber = ticket.ServiceGroupId.HasValue
+                ? await FormatDisplayNumberAsync(ticket.BranchId, ticket.ServiceGroupId.Value, ticket.TicketNumber)
+                : ticket.TicketNumber.ToString();
             ticket.QueueDate = DateOnly.FromDateTime(DateTime.UtcNow);
             ticket.Status = TicketStatus.Waiting;
         }
@@ -314,10 +324,14 @@ public class QueueService(
             estimate = await estimator.EstimateAsync(branchId, current.ServiceType, waiting);
 
         // Next 3 in waiting (for display board)
-        var nextTickets = activeTickets
+        var nextWaiting = activeTickets
             .Where(t => t.Status == TicketStatus.Waiting)
             .Take(3)
-            .Select(t => t.TicketNumber)
+            .ToList();
+
+        var nextTickets = nextWaiting.Select(t => t.TicketNumber).ToList();
+        var nextDisplayNumbers = nextWaiting
+            .Select(t => t.DisplayNumber ?? t.TicketNumber.ToString())
             .ToList();
 
         return new QueueStatusResponse(
@@ -331,7 +345,9 @@ public class QueueService(
             IsOpen: branch?.IsOpen ?? true,
             NextTicketNumbers: nextTickets,
             CounterId: current?.CounterId,
-            CurrentTicketId: current?.Id
+            CurrentTicketId: current?.Id,
+            CurrentDisplayNumber: current?.DisplayNumber ?? current?.TicketNumber.ToString(),
+            NextDisplayNumbers: nextDisplayNumbers
         );
     }
 
@@ -423,23 +439,49 @@ public class QueueService(
         return ticket;
     }
 
-    private async Task<int> NextTicketNumberAsync(string branchId)
+    private async Task<int> NextTicketNumberAsync(string branchId, int? serviceGroupId)
     {
         var cache = redis.GetDatabase();
         var date = DateTime.UtcNow.ToString("yyyyMMdd");
-        var key = $"ticket_seq:{branchId}:{date}";
+        var key = serviceGroupId.HasValue
+            ? $"ticket_seq:{branchId}:g{serviceGroupId.Value}:{date}"
+            : $"ticket_seq:{branchId}:{date}";
 
         if (!await cache.KeyExistsAsync(key))
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var todayMax = await db.QueueTickets
-                .Where(t => t.BranchId == branchId && t.QueueDate == today)
-                .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
+            int todayMax;
+            if (serviceGroupId.HasValue)
+            {
+                todayMax = await db.QueueTickets
+                    .Where(t => t.BranchId == branchId && t.ServiceGroupId == serviceGroupId && t.QueueDate == today)
+                    .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
+            }
+            else
+            {
+                todayMax = await db.QueueTickets
+                    .Where(t => t.BranchId == branchId && t.ServiceGroupId == null && t.QueueDate == today)
+                    .MaxAsync(t => (int?)t.TicketNumber) ?? 0;
+            }
             await cache.StringSetAsync(key, todayMax, when: When.NotExists);
             await cache.KeyExpireAsync(key, TimeSpan.FromDays(2));
         }
 
         return (int)await cache.StringIncrementAsync(key);
+    }
+
+    private async Task<(int? groupId, string? prefix)> ResolveGroupAsync(string branchId, string serviceType)
+    {
+        var svc = await db.BranchServices
+            .Include(s => s.ServiceGroup)
+            .FirstOrDefaultAsync(s => s.BranchId == branchId && s.Name == serviceType);
+        return (svc?.ServiceGroupId, svc?.ServiceGroup?.Prefix);
+    }
+
+    private async Task<string> FormatDisplayNumberAsync(string branchId, int groupId, int ticketNumber)
+    {
+        var group = await db.ServiceGroups.FindAsync(groupId);
+        return group?.Prefix != null ? $"{group.Prefix}-{ticketNumber}" : ticketNumber.ToString();
     }
 
     private async Task<int> ActiveCountAsync(string branchId) =>
@@ -475,7 +517,7 @@ public class QueueService(
             .FirstOrDefaultAsync();
 
     private static TicketResponse MapTicket(QueueTicket t, int peopleAhead, WaitEstimateDto? estimate) =>
-        new(t.Id, t.BranchId, t.TicketNumber, t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate, t.ViewToken, t.Priority, t.CounterId);
+        new(t.Id, t.BranchId, t.TicketNumber, t.DisplayNumber ?? t.TicketNumber.ToString(), t.ServiceType, t.CustomerName, t.Status, peopleAhead, t.JoinedAt, estimate, t.ViewToken, t.Priority, t.CounterId);
 
     private async Task<QueueStatusResponse> BroadcastQueueStateAsync(string branchId)
     {

@@ -207,6 +207,46 @@ using (var scope = app.Services.CreateScope())
     await ctx.Database.ExecuteSqlRawAsync("""
         ALTER TABLE "StaffAccounts" ADD COLUMN IF NOT EXISTS "DefaultKioskPin" TEXT NULL;
         """);
+
+    await ctx.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS "ServiceGroups" (
+            "Id"        SERIAL       PRIMARY KEY,
+            "BranchId"  VARCHAR(100) NOT NULL,
+            "Name"      VARCHAR(200) NOT NULL,
+            "Prefix"    VARCHAR(5)   NULL,
+            "SortOrder" INTEGER      NOT NULL DEFAULT 0,
+            "CreatedAt" TIMESTAMP    NOT NULL DEFAULT NOW(),
+            CONSTRAINT "FK_ServiceGroups_Branches_BranchId"
+                FOREIGN KEY ("BranchId") REFERENCES "Branches"("Id") ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS "IX_ServiceGroups_BranchId" ON "ServiceGroups"("BranchId");
+
+        ALTER TABLE "BranchServices"
+            ADD COLUMN IF NOT EXISTS "ServiceGroupId" INTEGER NULL
+            REFERENCES "ServiceGroups"("Id") ON DELETE SET NULL;
+        CREATE INDEX IF NOT EXISTS "IX_BranchServices_ServiceGroupId"
+            ON "BranchServices"("ServiceGroupId");
+
+        ALTER TABLE "QueueTickets"
+            ADD COLUMN IF NOT EXISTS "ServiceGroupId" INTEGER NULL
+            REFERENCES "ServiceGroups"("Id") ON DELETE SET NULL;
+        ALTER TABLE "QueueTickets"
+            ADD COLUMN IF NOT EXISTS "DisplayNumber" VARCHAR(20) NULL;
+
+        UPDATE "QueueTickets"
+            SET "DisplayNumber" = "TicketNumber"::text
+            WHERE "DisplayNumber" IS NULL;
+
+        DROP INDEX IF EXISTS "IX_QueueTickets_BranchId_QueueDate_TicketNumber";
+
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_QueueTickets_Ungrouped_Unique"
+            ON "QueueTickets"("BranchId", "QueueDate", "TicketNumber")
+            WHERE "ServiceGroupId" IS NULL;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_QueueTickets_Grouped_Unique"
+            ON "QueueTickets"("BranchId", "ServiceGroupId", "QueueDate", "TicketNumber")
+            WHERE "ServiceGroupId" IS NOT NULL;
+        """);
 }
 
 // Middleware pipeline

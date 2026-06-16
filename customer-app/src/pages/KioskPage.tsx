@@ -288,7 +288,7 @@ export function KioskPage() {
 
   // ── Served ────────────────────────────────────────────────────────────────
   if (screen === 'served') {
-    return <KioskServedScreen ticketNumber={ticket?.ticketNumber ?? 0} onReset={reset} />
+    return <KioskServedScreen ticketNumber={ticket?.displayNumber ?? ticket?.ticketNumber ?? 0} onReset={reset} />
   }
 
   // ── Scanned ───────────────────────────────────────────────────────────────
@@ -308,7 +308,7 @@ export function KioskPage() {
     return (
       <div className="min-h-screen bg-teal-brand flex flex-col items-center justify-center p-8 text-white text-center gap-6">
         <p className="text-teal-light text-xl font-medium tracking-wide uppercase">Your Queue Number</p>
-        <div className="text-[140px] font-black leading-none">{ticket.ticketNumber}</div>
+        <div className="text-[140px] font-black leading-none">{ticket.displayNumber}</div>
         {ticket.priority && <span className="px-4 py-1 bg-amber-400 text-amber-900 rounded-full text-lg font-bold">⚡ Priority</span>}
         <p className="text-teal-light text-xl">{ticket.serviceType}&nbsp;·&nbsp;{ticket.customerName}</p>
         <div className="bg-white rounded-2xl p-6">
@@ -423,7 +423,7 @@ export function KioskPage() {
 
 const SERVED_RESET_SECS = 8
 
-function KioskServedScreen({ ticketNumber, onReset }: { ticketNumber: number; onReset: () => void }) {
+function KioskServedScreen({ ticketNumber, onReset }: { ticketNumber: number | string; onReset: () => void }) {
   const [countdown, setCountdown] = useState(SERVED_RESET_SECS)
 
   useEffect(() => {
