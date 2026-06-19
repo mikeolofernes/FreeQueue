@@ -192,7 +192,10 @@ using (var scope = app.Services.CreateScope())
     // Scope ticket-number uniqueness by queue date. Ticket numbers reset daily
     // (the Redis counter is keyed by date), so the global unique index on
     // (BranchId, TicketNumber) collided with prior days' tickets. Add a
-    // QueueDate column and make the unique index (BranchId, QueueDate, TicketNumber).
+    // QueueDate column; the actual unique index (scoped per service group) is
+    // created further below, since a single global index here would collide
+    // with grouped tickets that legitimately reuse a TicketNumber also used
+    // by an ungrouped ticket on the same day.
     await ctx.Database.ExecuteSqlRawAsync("""
         ALTER TABLE "QueueTickets" ADD COLUMN IF NOT EXISTS "QueueDate" DATE;
         UPDATE "QueueTickets" SET "QueueDate" = "JoinedAt"::date WHERE "QueueDate" IS NULL;
@@ -200,8 +203,7 @@ using (var scope = app.Services.CreateScope())
         ALTER TABLE "QueueTickets" ALTER COLUMN "QueueDate" SET NOT NULL;
 
         DROP INDEX IF EXISTS "IX_QueueTickets_BranchId_TicketNumber";
-        CREATE UNIQUE INDEX IF NOT EXISTS "IX_QueueTickets_BranchId_QueueDate_TicketNumber"
-            ON "QueueTickets"("BranchId", "QueueDate", "TicketNumber");
+        DROP INDEX IF EXISTS "IX_QueueTickets_BranchId_QueueDate_TicketNumber";
         """);
 
     await ctx.Database.ExecuteSqlRawAsync("""
