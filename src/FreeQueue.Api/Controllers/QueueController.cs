@@ -23,7 +23,12 @@ public class QueueController(QueueService queue, AppDbContext db) : ControllerBa
             var branch = await db.Branches.FindAsync(branchId);
             if (branch == null) return NotFound("Branch not found.");
             if (!branch.IsOpen) return BadRequest("Queue is currently closed.");
-            if (branch.KioskPin != null && !KioskPinCrypto.Verify(req.KioskPin, branch.KioskPin))
+            // Require an activated (PIN-protected) kiosk so tickets can only be
+            // created at the on-site device, never by hitting this endpoint
+            // remotely. A branch with no PIN configured cannot issue tickets.
+            if (branch.KioskPin == null)
+                return Unauthorized("This kiosk is not activated. Set a kiosk PIN in the Staff app first.");
+            if (!KioskPinCrypto.Verify(req.KioskPin, branch.KioskPin))
                 return Unauthorized("Invalid kiosk PIN.");
 
             return Ok(await queue.JoinQueueAsync(

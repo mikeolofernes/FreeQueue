@@ -4,7 +4,7 @@ import { useQueueHub } from './useQueueHub'
 import { LoginScreen } from './LoginScreen'
 import { WalkInModal } from './WalkInModal'
 import { ElapsedTimer } from './ElapsedTimer'
-import type { QueueStatus, BranchService, ServiceGroup, AnalyticsData, Appointment } from '../types'
+import type { QueueStatus, BranchService, ServiceGroup, AnalyticsData } from '../types'
 
 const BRANCH_KEY = 'fq_branch_id'
 const BRANCH_NAME_KEY = 'fq_branch_name'
@@ -14,7 +14,7 @@ const GROUP_ID_KEY = 'fq_group_id'
 
 type MyTicket = { id: number; displayNumber: string; serviceType: string }
 
-type Panel = 'none' | 'pin' | 'services' | 'analytics' | 'appointments'
+type Panel = 'none' | 'pin' | 'services' | 'analytics'
 
 export default function StaffApp() {
   const [branchId, setBranchId] = useState(() => localStorage.getItem(BRANCH_KEY) ?? '')
@@ -38,7 +38,6 @@ export default function StaffApp() {
   const [editingCounterId, setEditingCounterId] = useState(false)
   const [counterIdInput, setCounterIdInput] = useState('')
   const [showTransfer, setShowTransfer] = useState(false)
-  const [appointments, setAppointments] = useState<Appointment[] | null>(null)
   const [serviceGroups, setServiceGroups] = useState<ServiceGroup[]>([])
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(() => {
     const v = localStorage.getItem(GROUP_ID_KEY)
@@ -343,25 +342,6 @@ export default function StaffApp() {
     }
   }
 
-  async function handleLoadAppointments() {
-    try {
-      const data = await api.getAppointments(branchId)
-      setAppointments(data)
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load appointments', 'err')
-    }
-  }
-
-  async function handleUpdateAppointmentStatus(id: number, newStatus: string) {
-    try {
-      await api.updateAppointmentStatus(branchId, id, newStatus)
-      setAppointments(prev => prev ? prev.map(a => a.id === id ? { ...a, status: newStatus } : a) : prev)
-      showToast(`✓ Appointment ${newStatus}`)
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to update appointment', 'err')
-    }
-  }
-
   function saveCounterId() {
     const val = counterIdInput.trim()
     localStorage.setItem(COUNTER_ID_KEY, val)
@@ -373,7 +353,6 @@ export default function StaffApp() {
     if (activePanel === p) { setActivePanel('none'); return }
     setActivePanel(p)
     if (p === 'analytics') handleLoadAnalytics()
-    if (p === 'appointments') handleLoadAppointments()
   }
 
   if (!isLoggedIn) return <LoginScreen onLogin={handleLogin} />
@@ -551,13 +530,6 @@ export default function StaffApp() {
           title="Analytics"
         >
           📊
-        </button>
-        <button
-          onClick={() => togglePanel('appointments')}
-          className={`py-3 px-3 rounded-xl border-2 font-semibold transition-colors text-sm ${activePanel === 'appointments' ? 'border-teal-brand bg-teal-brand text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-          title="Appointments"
-        >
-          📅
         </button>
       </div>
 
@@ -789,60 +761,6 @@ export default function StaffApp() {
             </div>
           ) : (
             <p className="text-sm text-gray-400 text-center py-4">Loading analytics…</p>
-          )}
-        </div>
-      )}
-
-      {/* Appointments panel */}
-      {activePanel === 'appointments' && (
-        <div className="bg-white border-t border-gray-200 px-5 py-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-gray-700">Appointments</p>
-            <button onClick={handleLoadAppointments} className="text-xs text-teal-brand hover:text-teal-dark">Refresh</button>
-          </div>
-          {appointments === null ? (
-            <p className="text-sm text-gray-400 text-center py-4">Loading…</p>
-          ) : appointments.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">No upcoming appointments</p>
-          ) : (
-            <div className="space-y-3 max-h-64 overflow-y-auto">
-              {appointments.map(a => (
-                <div key={a.id} className="border border-gray-100 rounded-xl p-3 space-y-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-sm text-gray-800">{a.customerName}</p>
-                      <p className="text-xs text-gray-500">{a.serviceType}</p>
-                    </div>
-                    <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
-                      a.status === 'confirmed' ? 'bg-blue-50 text-blue-600' :
-                      a.status === 'arrived' ? 'bg-amber-50 text-amber-600' :
-                      a.status === 'completed' ? 'bg-green-50 text-green-600' :
-                      a.status === 'cancelled' ? 'bg-red-50 text-red-500' :
-                      'bg-gray-100 text-gray-500'
-                    }`}>{a.status}</span>
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    {new Date(a.scheduledAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                  {a.notes && <p className="text-xs text-gray-400 italic">{a.notes}</p>}
-                  {a.status === 'pending' && (
-                    <div className="flex gap-1.5 pt-1">
-                      <button onClick={() => handleUpdateAppointmentStatus(a.id, 'confirmed')} className="flex-1 text-xs py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">Confirm</button>
-                      <button onClick={() => handleUpdateAppointmentStatus(a.id, 'cancelled')} className="flex-1 text-xs py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors">Cancel</button>
-                    </div>
-                  )}
-                  {a.status === 'confirmed' && (
-                    <div className="flex gap-1.5 pt-1">
-                      <button onClick={() => handleUpdateAppointmentStatus(a.id, 'arrived')} className="flex-1 text-xs py-1 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors">Mark Arrived</button>
-                      <button onClick={() => handleUpdateAppointmentStatus(a.id, 'cancelled')} className="flex-1 text-xs py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors">Cancel</button>
-                    </div>
-                  )}
-                  {a.status === 'arrived' && (
-                    <button onClick={() => handleUpdateAppointmentStatus(a.id, 'completed')} className="w-full text-xs py-1 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors">Complete</button>
-                  )}
-                </div>
-              ))}
-            </div>
           )}
         </div>
       )}
